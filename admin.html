@@ -211,6 +211,7 @@ tr:hover td { background: #fafeff; }
   <div class="nav-tab" onclick="tab('t-plan', this)">Plan</div>
   <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
   <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
+  <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
 </div>
 
 <div class="container">
@@ -577,7 +578,7 @@ tr:hover td { background: #fafeff; }
     <div id="aviso-pendientes"></div>
     <div class="card">
       <div class="card-header">
-        <h2>Empleados (<span id="emp-count">0</span>)</h2>
+        <h2><span id="emp-titulo">Empleados activos</span> (<span id="emp-count">0</span>)</h2>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="ver-inactivos" onchange="cargarEmpleados()" style="width:auto;"> Ver dados de baja
@@ -654,6 +655,46 @@ tr:hover td { background: #fafeff; }
           <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th>Acción</th></tr></thead>
           <tbody id="body-cursos"><tr class="empty-row"><td colspan="6">Cargando...</td></tr></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: BACKUP ══ -->
+  <div class="tab-content" id="t-backup">
+    <div class="card">
+      <div class="card-header"><h2>Respaldo mensual</h2></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">
+          Descargá una copia de seguridad para guardar localmente. Recomendado hacerlo a fin de cada mes.
+          El respaldo incluye un Excel con toda la información y todas las actas PDF del período seleccionado.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Desde</label>
+            <input type="date" id="bk-desde">
+          </div>
+          <div class="form-group">
+            <label>Hasta</label>
+            <input type="date" id="bk-hasta">
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-label">1 · Datos completos en Excel</div>
+        <p style="font-size:13px;color:#666;margin-bottom:10px;">
+          Un archivo Excel con varias hojas: empleados, capacitaciones, sesiones, asistencias, convocados y plan.
+        </p>
+        <button class="btn btn-success" id="bk-btn-excel" onclick="backupExcel()">⬇ Descargar Excel completo</button>
+
+        <div class="divider"></div>
+
+        <div class="section-label">2 · Actas PDF del período</div>
+        <p style="font-size:13px;color:#666;margin-bottom:10px;">
+          Descarga cada acta PDF de las sesiones cerradas en el rango de fechas. Se bajan una por una.
+        </p>
+        <button class="btn btn-primary" id="bk-btn-pdf" onclick="backupPDFs()">⬇ Descargar todas las actas PDF</button>
+        <div id="bk-progreso" style="margin-top:12px;font-size:13px;color:#666;"></div>
       </div>
     </div>
   </div>
@@ -743,6 +784,12 @@ window.addEventListener('load', () => {
   const hoy = new Date();
   document.getElementById('f-desde').value = hoy.getFullYear() + '-01-01';
   document.getElementById('f-hasta').value = hoy.toISOString().slice(0,10);
+  // Backup: por defecto, del primer día del mes actual a hoy
+  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const bkDesde = document.getElementById('bk-desde');
+  const bkHasta = document.getElementById('bk-hasta');
+  if (bkDesde) bkDesde.value = primerDiaMes.toISOString().slice(0,10);
+  if (bkHasta) bkHasta.value = hoy.toISOString().slice(0,10);
   inicializarPeriodos();
   cargarTodo();
 });
@@ -1101,12 +1148,19 @@ async function exportarExcel() {
 async function cargarEmpleados() {
   const verInactivos = document.getElementById('ver-inactivos')?.checked;
   let q = sb.from('empleados').select('*').order('auto_agregado', { ascending: false }).order('nombre');
-  if (!verInactivos) q = q.eq('activo', true);
+  // Activado: solo dados de baja. Desactivado: solo activos.
+  q = verInactivos ? q.eq('activo', false) : q.eq('activo', true);
   const { data } = await q;
 
   const tbody = document.getElementById('body-emp');
   document.getElementById('emp-count').textContent = data ? data.length : 0;
-  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Sin empleados.</td></tr>'; return; }
+  const tituloEl = document.getElementById('emp-titulo');
+  if (tituloEl) tituloEl.textContent = verInactivos ? 'Empleados dados de baja' : 'Empleados activos';
+  if (!data || !data.length) {
+    const msg = verInactivos ? 'No hay empleados dados de baja.' : 'Sin empleados.';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' + msg + '</td></tr>';
+    return;
+  }
 
   // Aviso de pendientes de validar
   const pendientes = data.filter(e => e.auto_agregado && e.activo).length;
@@ -1142,17 +1196,21 @@ async function cargarEmpleados() {
     </tr>`;
   }).join('');
 
-  const sectores = [...new Set(data.map(e => e.sector).filter(Boolean))].sort();
+  // El filtro de sector y los datalist se pueblan con TODOS los empleados
+  // (activos + baja), independiente del toggle, para no perder sugerencias.
+  const { data: todos } = await sb.from('empleados').select('centro, sector, contrato, genero, convenio');
+  const base = todos || data;
+
+  const sectores = [...new Set(base.map(e => e.sector).filter(Boolean))].sort();
   const sel = document.getElementById('f-sector');
   sel.innerHTML = '<option value="">Todos</option>';
   sectores.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
 
-  // Poblar los datalist solo con los valores que ya existen entre los empleados
-  poblarDatalist('dl-centros', data.map(e => e.centro));
-  poblarDatalist('dl-sectores', data.map(e => e.sector));
-  poblarDatalist('dl-contratos', data.map(e => e.contrato));
-  poblarDatalist('dl-generos', data.map(e => e.genero));
-  poblarDatalist('dl-convenios', data.map(e => e.convenio));
+  poblarDatalist('dl-centros', base.map(e => e.centro));
+  poblarDatalist('dl-sectores', base.map(e => e.sector));
+  poblarDatalist('dl-contratos', base.map(e => e.contrato));
+  poblarDatalist('dl-generos', base.map(e => e.genero));
+  poblarDatalist('dl-convenios', base.map(e => e.convenio));
 }
 
 function poblarDatalist(datalistId, valoresExistentes, predefinidos = []) {
@@ -1701,6 +1759,113 @@ function verAusentes(capId, centro, periodo) {
   if (!f || !f.ausentes.length) { toast('Sin ausentes.'); return; }
   const lista = f.ausentes.map(e => '• ' + e.nombre + ' (' + (e.sector || 's/sector') + ')').join('\n');
   alert('Ausentes en ' + (f.plan.capacitaciones?.titulo || '') + ' — ' + centro + ':\n\n' + lista);
+}
+
+// ── BACKUP ──
+async function backupExcel() {
+  const desde = document.getElementById('bk-desde').value;
+  const hasta = document.getElementById('bk-hasta').value;
+  if (!desde || !hasta) { toast('Elegí el rango de fechas.'); return; }
+
+  const btn = document.getElementById('bk-btn-excel');
+  btn.disabled = true; btn.textContent = 'Generando...';
+
+  try {
+    // Traer todo
+    const [empleados, capacitaciones, sesiones, plan] = await Promise.all([
+      sb.from('empleados').select('*').order('nombre'),
+      sb.from('capacitaciones').select('*').order('codigo'),
+      sb.from('sesiones').select('*, capacitaciones(titulo, tipo, codigo)').gte('fecha', desde).lte('fecha', hasta).order('fecha'),
+      sb.from('plan_capacitacion').select('*, capacitaciones(titulo, codigo)').order('periodo')
+    ]);
+
+    const sesIds = (sesiones.data || []).map(s => s.id);
+    let asistencias = { data: [] };
+    let convocados = { data: [] };
+    if (sesIds.length) {
+      asistencias = await sb.from('asistencias').select('*, empleados(legajo, nombre, sector), sesiones(fecha, centro, capacitaciones(titulo))').in('sesion_id', sesIds);
+      convocados = await sb.from('convocados').select('*, empleados(legajo, nombre), sesiones(fecha, capacitaciones(titulo))').in('sesion_id', sesIds);
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Hoja Empleados
+    const hEmp = [['Legajo','Nombre','Centro','Sector','Contrato','Genero','Convenio','Activo','Auto-agregado']];
+    (empleados.data||[]).forEach(e => hEmp.push([e.legajo, e.nombre, e.centro||'', e.sector||'', e.contrato||'', e.genero||'', e.convenio||'', e.activo?'Sí':'No', e.auto_agregado?'Sí':'No']));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hEmp), 'Empleados');
+
+    // Hoja Capacitaciones
+    const hCap = [['Codigo','Titulo','Tipo','Duracion (hs)','Responsable','Activa']];
+    (capacitaciones.data||[]).forEach(c => hCap.push([c.codigo||'', c.titulo, c.tipo||'', c.duracion_horas||'', c.responsable||'', c.activa?'Sí':'No']));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hCap), 'Capacitaciones');
+
+    // Hoja Sesiones
+    const hSes = [['Fecha','Codigo','Capacitacion','Tipo','Centro','Lugar','Instructor','Estado','Verif. eficacia']];
+    (sesiones.data||[]).forEach(s => hSes.push([formatFecha(s.fecha), s.capacitaciones?.codigo||'', s.capacitaciones?.titulo||'', s.capacitaciones?.tipo||'', s.centro||'', s.lugar||'', s.instructor||'', s.estado, s.verificacion_eficacia||'']));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hSes), 'Sesiones');
+
+    // Hoja Asistencias
+    const hAsi = [['Fecha','Capacitacion','Centro','Legajo','Nombre','Sector','Hora firma']];
+    (asistencias.data||[]).forEach(a => hAsi.push([formatFecha(a.sesiones?.fecha||''), a.sesiones?.capacitaciones?.titulo||'', a.sesiones?.centro||'', a.empleados?.legajo||'', a.empleados?.nombre||'', a.empleados?.sector||'', a.firmado_at?new Date(a.firmado_at).toLocaleString('es-AR'):'']));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hAsi), 'Asistencias');
+
+    // Hoja Convocados
+    const hConv = [['Fecha','Capacitacion','Legajo','Nombre']];
+    (convocados.data||[]).forEach(c => hConv.push([formatFecha(c.sesiones?.fecha||''), c.sesiones?.capacitaciones?.titulo||'', c.empleados?.legajo||'', c.empleados?.nombre||'']));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hConv), 'Convocados');
+
+    // Hoja Plan
+    const hPlan = [['Periodo','Codigo','Capacitacion','Centro','Mes']];
+    (plan.data||[]).forEach(p => hPlan.push(['Jul '+p.periodo+' - Jun '+(p.periodo+1), p.capacitaciones?.codigo||'', p.capacitaciones?.titulo||'', p.centro, MESES[p.mes]]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hPlan), 'Plan');
+
+    XLSX.writeFile(wb, 'Backup_Capacitaciones_' + desde + '_a_' + hasta + '.xlsx');
+    toast('Backup Excel generado.');
+  } catch (err) {
+    toast('Error: ' + err.message);
+  }
+  btn.disabled = false; btn.textContent = '⬇ Descargar Excel completo';
+}
+
+async function backupPDFs() {
+  const desde = document.getElementById('bk-desde').value;
+  const hasta = document.getElementById('bk-hasta').value;
+  if (!desde || !hasta) { toast('Elegí el rango de fechas.'); return; }
+
+  const btn = document.getElementById('bk-btn-pdf');
+  const prog = document.getElementById('bk-progreso');
+  btn.disabled = true;
+
+  const { data: sesiones } = await sb.from('sesiones')
+    .select('id, fecha, pdf_url, capacitaciones(titulo)')
+    .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta)
+    .not('pdf_url', 'is', null).order('fecha');
+
+  if (!sesiones || !sesiones.length) {
+    prog.textContent = 'No hay actas PDF en ese período.';
+    btn.disabled = false;
+    return;
+  }
+
+  let ok = 0;
+  for (let i = 0; i < sesiones.length; i++) {
+    const s = sesiones[i];
+    prog.textContent = 'Descargando ' + (i+1) + ' de ' + sesiones.length + '...';
+    try {
+      const { data, error } = await sb.storage.from('pdfs').download(s.pdf_url);
+      if (error || !data) continue;
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      const nombre = 'Acta_' + (s.capacitaciones?.titulo||'sesion').replace(/[^\w]/g,'_') + '_' + s.fecha + '.pdf';
+      a.href = url; a.download = nombre; a.click();
+      URL.revokeObjectURL(url);
+      ok++;
+      await new Promise(r => setTimeout(r, 400)); // pausa para que el navegador no bloquee
+    } catch (_) {}
+  }
+
+  prog.textContent = '✓ Se descargaron ' + ok + ' de ' + sesiones.length + ' actas.';
+  btn.disabled = false;
 }
 
 // ── HELPERS ──
