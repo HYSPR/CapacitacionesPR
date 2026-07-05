@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administración · Capacitaciones</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f0f2f5; color: #1a1a1a; min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.header {
+  background: #1B4F8A; color: white;
+  padding: 14px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header h1 { font-size: 16px; font-weight: 600; }
+.header a {
+  color: rgba(255,255,255,0.8); font-size: 13px;
+  text-decoration: none;
+}
+.header a:hover { color: white; }
+
+/* ── NAV TABS ── */
+.nav {
+  background: white; border-bottom: 1px solid #e5e5e5;
+  display: flex; padding: 0 24px; gap: 4px;
+  overflow-x: auto;
+}
+.nav-tab {
+  padding: 12px 18px; font-size: 13px; font-weight: 500;
+  color: #888; border-bottom: 2px solid transparent;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s;
+}
+.nav-tab:hover { color: #1B4F8A; }
+.nav-tab.active { color: #1B4F8A; border-bottom-color: #1B4F8A; }
+
+/* ── CONTAINER ── */
+.container { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+/* ── METRICS ── */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.metric {
+  background: white; border-radius: 10px;
+  padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.metric-label { font-size: 12px; color: #888; font-weight: 500; margin-bottom: 4px; }
+.metric-value { font-size: 28px; font-weight: 700; color: #1B4F8A; }
+.metric-sub { font-size: 12px; color: #aaa; margin-top: 2px; }
+
+/* ── CARD ── */
+.card {
+  background: white; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  margin-bottom: 20px; overflow: hidden;
+}
+.card-header {
+  padding: 14px 20px; border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+}
+.card-header h2 { font-size: 14px; font-weight: 700; }
+.card-body { padding: 20px; }
+
+/* ── FORM ── */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; color: #666; font-weight: 500; margin-bottom: 4px; }
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%; padding: 9px 11px;
+  border: 1px solid #ddd; border-radius: 7px;
+  font-size: 13px; color: #1a1a1a; background: white;
+  appearance: none;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { outline: none; border-color: #1B4F8A; }
+
+/* ── FILTROS ── */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: flex-end; padding: 14px 20px;
+  border-bottom: 1px solid #f0f0f0; background: #fafafa;
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 120px; flex: 1; }
+.filter-group label { font-size: 11px; color: #888; font-weight: 500; }
+.filter-group input,
+.filter-group select {
+  padding: 7px 10px; border: 1px solid #ddd;
+  border-radius: 6px; font-size: 13px; background: white;
+  appearance: none;
+}
+
+/* ── TABLA ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead tr { background: #fafafa; }
+th {
+  padding: 10px 14px; text-align: left;
+  color: #888; font-weight: 500; font-size: 12px;
+  border-bottom: 1px solid #f0f0f0; white-space: nowrap;
+  cursor: pointer; user-select: none;
+}
+th:hover { color: #1B4F8A; }
+td { padding: 10px 14px; border-bottom: 1px solid #f5f5f5; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafeff; }
+.empty-row td { text-align: center; color: #bbb; padding: 30px; }
+
+/* ── BADGE ── */
+.badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: 99px; white-space: nowrap;
+}
+.badge-green { background: #E6F4EC; color: #1A6B3C; }
+.badge-yellow { background: #FEF3C7; color: #92400E; }
+.badge-blue { background: #E8EEF7; color: #1B4F8A; }
+.badge-gray { background: #f0f0f0; color: #666; }
+
+/* ── PROGRESS BAR ── */
+.prog { display: flex; align-items: center; gap: 8px; }
+.prog-bar { flex: 1; height: 5px; background: #eee; border-radius: 99px; overflow: hidden; min-width: 50px; }
+.prog-fill { height: 100%; border-radius: 99px; background: #1B4F8A; }
+.prog-fill.green { background: #1A6B3C; }
+.prog-fill.red { background: #c0392b; }
+
+/* ── MATRIZ ── */
+.matriz-table { font-size: 11px; }
+.matriz-table th, .matriz-table td { padding: 6px 8px; text-align: center; border: 1px solid #f0f0f0; }
+.matriz-table th:first-child, .matriz-table td:first-child { text-align: left; min-width: 130px; font-weight: 500; }
+.check-si { color: #1A6B3C; font-size: 14px; }
+.check-no { color: #ddd; font-size: 14px; }
+
+/* ── BOTONES ── */
+.btn {
+  padding: 9px 16px; border-radius: 7px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border: none; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-primary { background: #1B4F8A; color: white; }
+.btn-primary:hover { background: #163F72; }
+.btn-success { background: #1A6B3C; color: white; }
+.btn-success:hover { background: #155531; }
+.btn-outline { background: white; color: #333; border: 1.5px solid #ddd; }
+.btn-outline:hover { background: #f5f5f5; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── SEARCH ── */
+.search-input {
+  padding: 7px 11px; border: 1px solid #ddd;
+  border-radius: 7px; font-size: 13px; width: 200px;
+}
+.search-input:focus { outline: none; border-color: #1B4F8A; }
+
+/* ── TABS CONTENT ── */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── MODAL ── */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 500;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.overlay.open { display: flex; }
+.modal {
+  background: white; border-radius: 12px;
+  padding: 24px; width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #333; color: white; padding: 10px 20px;
+  border-radius: 8px; font-size: 13px;
+  opacity: 0; transition: opacity 0.25s; z-index: 999;
+}
+.toast.show { opacity: 1; }
+
+.divider { height: 1px; background: #f0f0f0; margin: 16px 0; }
+.section-label { font-size: 11px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+
+@media (max-width: 600px) {
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .search-input { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚙ Administración · Capacitaciones</h1>
+  <a href="firma.html">← Volver a registro</a>
+</div>
+
+<div class="nav">
+  <div class="nav-tab active" onclick="tab('t-sesiones', this)">Sesiones</div>
+  <div class="nav-tab" onclick="tab('t-avance', this)">Avance del plan</div>
+  <div class="nav-tab" onclick="tab('t-seguimiento', this)">Seguimiento</div>
+  <div class="nav-tab" onclick="tab('t-plan', this)">Plan</div>
+  <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
+  <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
+</div>
+
+<div class="container">
+
+  <!-- ══ TAB: SESIONES ══ -->
+  <div class="tab-content active" id="t-sesiones">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Sesiones este año</div>
+        <div class="metric-value" id="m-sesiones">—</div>
+        <div class="metric-sub" id="m-sesiones-sub"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total asistencias</div>
+        <div class="metric-value" id="m-asistencias">—</div>
+        <div class="metric-sub">registros válidos</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Personas capacitadas</div>
+        <div class="metric-value" id="m-personas">—</div>
+        <div class="metric-sub" id="m-personas-sub"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Horas dictadas</div>
+        <div class="metric-value" id="m-horas">—</div>
+        <div class="metric-sub">este año</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filters" style="border-radius:10px 10px 0 0;">
+        <div class="filter-group">
+          <label>Año fiscal (Jul–Jun)</label>
+          <select id="ses-periodo" onchange="cargarSesiones()"></select>
+        </div>
+        <div class="filter-group">
+          <label>Centro</label>
+          <select id="ses-centro" onchange="cargarSesiones()">
+            <option value="">Todos los centros</option>
+            <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Estado</label>
+          <select id="ses-estado" onchange="cargarSesiones()">
+            <option value="">Todas</option>
+            <option value="cerrada">Cerradas</option>
+            <option value="abierta">Abiertas</option>
+          </select>
+        </div>
+        <div class="filter-group" style="flex:2;">
+          <label>Buscar</label>
+          <input type="text" placeholder="Capacitación, instructor..."
+                 oninput="filtrarTabla('tbl-sesiones', this.value, [0,1,2,4])">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-sesiones">
+          <thead>
+            <tr>
+              <th onclick="sort('tbl-sesiones',0)">Fecha ↕</th>
+              <th onclick="sort('tbl-sesiones',1)">Capacitación ↕</th>
+              <th>Tipo</th>
+              <th onclick="sort('tbl-sesiones',3)">Centro ↕</th>
+              <th onclick="sort('tbl-sesiones',4)">Instructor ↕</th>
+              <th>Lugar</th>
+              <th onclick="sort('tbl-sesiones',6)">Asistentes ↕</th>
+              <th>Estado</th>
+              <th>PDF</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="body-sesiones">
+            <tr class="empty-row"><td colspan="10">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: AVANCE DEL PLAN ══ -->
+  <div class="tab-content" id="t-avance">
+    <div class="filters">
+      <div class="filter-group">
+        <label>Período (ciclo jul–jun)</label>
+        <select id="av-periodo"></select>
+      </div>
+      <div class="filter-group">
+        <label>Centro</label>
+        <select id="av-centro">
+          <option value="">Todos los centros</option>
+          <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="cargarAvance()">Aplicar</button>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Planificadas</div>
+        <div class="metric-value" id="av-planificadas">—</div>
+        <div class="metric-sub">en el período</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Realizadas</div>
+        <div class="metric-value" id="av-realizadas" style="color:#1A6B3C;">—</div>
+        <div class="metric-sub" id="av-realizadas-sub"></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Pendientes</div>
+        <div class="metric-value" id="av-pendientes" style="color:#c0392b;">—</div>
+        <div class="metric-sub">aún sin dictar</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avance global</div>
+        <div class="metric-value" id="av-pct">—</div>
+        <div class="metric-sub">del plan cumplido</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Detalle del plan por curso y centro</h2></div>
+      <div class="table-wrap" id="avance-wrap">
+        <div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">Aplicá un filtro para ver el avance.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: PLAN ══ -->
+  <div class="tab-content" id="t-plan">
+    <div class="card">
+      <div class="card-header">
+        <h2>Planificar capacitación</h2>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">
+          Definí en qué mes cada centro tiene que dictar cada curso. El ciclo va de julio a junio del año siguiente.
+        </p>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>Capacitación</label>
+            <select id="pl-curso"><option value="">Seleccioná...</option></select>
+          </div>
+          <div class="form-group">
+            <label>Centro</label>
+            <select id="pl-centro">
+              <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Mes</label>
+            <select id="pl-mes">
+              <option value="7">Julio</option><option value="8">Agosto</option>
+              <option value="9">Septiembre</option><option value="10">Octubre</option>
+              <option value="11">Noviembre</option><option value="12">Diciembre</option>
+              <option value="1">Enero</option><option value="2">Febrero</option>
+              <option value="3">Marzo</option><option value="4">Abril</option>
+              <option value="5">Mayo</option><option value="6">Junio</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="max-width:33%;">
+          <label>Período (año de inicio del ciclo)</label>
+          <select id="pl-periodo"></select>
+        </div>
+        <button class="btn btn-primary" onclick="agregarPlan()">+ Agregar al plan</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Plan cargado</h2>
+        <select id="pl-filtro-periodo" onchange="cargarPlan()" style="font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;"></select>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-plan">
+          <thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes</th><th>Acción</th></tr></thead>
+          <tbody id="body-plan"><tr class="empty-row"><td colspan="5">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: SEGUIMIENTO ══ -->
+  <div class="tab-content" id="t-seguimiento">
+    <div class="filters">
+      <div class="filter-group">
+        <label>Desde</label>
+        <input type="date" id="f-desde">
+      </div>
+      <div class="filter-group">
+        <label>Hasta</label>
+        <input type="date" id="f-hasta">
+      </div>
+      <div class="filter-group">
+        <label>Sector</label>
+        <select id="f-sector">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Tipo</label>
+        <select id="f-tipo">
+          <option value="">Todos</option>
+          <option>BPM</option><option>Seguridad</option>
+          <option>Calidad</option><option>Ambiental</option><option>Otro</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="cargarSeguimiento()">Aplicar</button>
+      <button class="btn btn-success" onclick="exportarExcel()">⬇ Excel</button>
+    </div>
+
+    <!-- Sub-tabs seguimiento -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #e5e5e5;">
+      <div class="nav-tab active" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-personas', this)">Por persona</div>
+      <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-cursos', this)">Por curso</div>
+      <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-matriz', this)">Matriz</div>
+      <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-faltantes', this)">Faltantes</div>
+    </div>
+
+    <!-- Por persona -->
+    <div class="tab-content active" id="st-personas">
+      <div class="card">
+        <div class="card-header">
+          <h2>Capacitaciones por persona</h2>
+          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-personas', this.value, [0,1])">
+        </div>
+        <div class="table-wrap">
+          <table id="tbl-personas">
+            <thead>
+              <tr>
+                <th onclick="sort('tbl-personas',0)">Legajo ↕</th>
+                <th onclick="sort('tbl-personas',1)">Nombre ↕</th>
+                <th>Sector</th>
+                <th onclick="sort('tbl-personas',3)">Capacitaciones ↕</th>
+                <th onclick="sort('tbl-personas',4)">Horas ↕</th>
+                <th>Última</th>
+              </tr>
+            </thead>
+            <tbody><tr class="empty-row"><td colspan="6">Aplicá un filtro para ver datos.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Por curso -->
+    <div class="tab-content" id="st-cursos">
+      <div class="card">
+        <div class="card-header"><h2>Asistencia por curso</h2></div>
+        <div class="table-wrap">
+          <table id="tbl-cursos-seg">
+            <thead>
+              <tr>
+                <th onclick="sort('tbl-cursos-seg',0)">Capacitación ↕</th>
+                <th>Tipo</th>
+                <th onclick="sort('tbl-cursos-seg',2)">Sesiones ↕</th>
+                <th onclick="sort('tbl-cursos-seg',3)">Asistentes ↕</th>
+                <th>Por sector</th>
+              </tr>
+            </thead>
+            <tbody><tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Matriz -->
+    <div class="tab-content" id="st-matriz">
+      <div class="card">
+        <div class="card-header">
+          <h2>Matriz persona × curso</h2>
+          <span style="font-size:12px;color:#aaa;">✓ realizó · — no realizó</span>
+        </div>
+        <div class="table-wrap" id="matriz-wrap">
+          <div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">Aplicá un filtro para ver datos.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Faltantes -->
+    <div class="tab-content" id="st-faltantes">
+      <div class="card">
+        <div class="card-header">
+          <h2>Personas que NO hicieron un curso</h2>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="f-curso-faltante" style="font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;min-width:200px;">
+              <option value="">Seleccioná un curso...</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="cargarFaltantes()">Ver faltantes</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="tbl-faltantes">
+            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Turno</th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="4">Seleccioná un curso.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: EMPLEADOS ══ -->
+  <div class="tab-content" id="t-empleados">
+    <!-- Carga masiva -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Carga masiva desde Excel</h2>
+        <button class="btn btn-outline btn-sm" onclick="descargarPlantilla()">⬇ Descargar plantilla</button>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">
+          Subí un Excel con las columnas: <strong>legajo, nombre, sector, contrato, genero, convenio</strong>.
+          Descargá la plantilla si querés el formato exacto.
+        </p>
+        <input type="file" id="file-masivo" accept=".xlsx,.xls,.csv"
+               style="font-size:13px;margin-bottom:12px;display:block;">
+        <button class="btn btn-success" onclick="procesarMasivo()">Procesar archivo</button>
+        <div id="masivo-resultado" style="margin-top:12px;font-size:13px;"></div>
+      </div>
+    </div>
+
+    <!-- Alta individual -->
+    <div class="card">
+      <div class="card-header"><h2>Agregar empleado individual</h2></div>
+      <div class="card-body">
+        <div class="form-row">
+          <div class="form-group"><label>Legajo *</label><input type="text" id="e-legajo" placeholder="4521"></div>
+          <div class="form-group"><label>Nombre y apellido *</label><input type="text" id="e-nombre" placeholder="Juan Pérez"></div>
+        </div>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>Centro productivo</label>
+            <input list="dl-centros" id="e-centro" placeholder="Elegí o escribí uno nuevo">
+            <datalist id="dl-centros"></datalist>
+          </div>
+          <div class="form-group">
+            <label>Sector</label>
+            <input list="dl-sectores" id="e-sector" placeholder="Elegí o escribí uno nuevo">
+            <datalist id="dl-sectores"></datalist>
+          </div>
+          <div class="form-group">
+            <label>Contrato</label>
+            <input list="dl-contratos" id="e-contrato" placeholder="Elegí o escribí uno nuevo">
+            <datalist id="dl-contratos"></datalist>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Género</label>
+            <input list="dl-generos" id="e-genero" placeholder="Elegí o escribí uno nuevo">
+            <datalist id="dl-generos"></datalist>
+          </div>
+          <div class="form-group">
+            <label>Convenio</label>
+            <input list="dl-convenios" id="e-convenio" placeholder="Elegí o escribí uno nuevo">
+            <datalist id="dl-convenios"></datalist>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="agregarEmpleado()">+ Agregar empleado</button>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div id="aviso-pendientes"></div>
+    <div class="card">
+      <div class="card-header">
+        <h2>Empleados (<span id="emp-count">0</span>)</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="ver-inactivos" onchange="cargarEmpleados()" style="width:auto;"> Ver dados de baja
+          </label>
+          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [0,1,2])">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-emp">
+          <thead><tr><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
+          <tbody id="body-emp"><tr class="empty-row"><td colspan="8">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: CURSOS ══ -->
+  <div class="tab-content" id="t-cursos">
+    <!-- Carga masiva -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Carga masiva desde Excel</h2>
+        <button class="btn btn-outline btn-sm" onclick="descargarPlantillaCursos()">⬇ Descargar plantilla</button>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">
+          Subí un Excel con las columnas: <strong>titulo, tipo, responsable, duracion</strong>.
+          El código de capacitación se genera automáticamente.
+        </p>
+        <input type="file" id="file-masivo-cursos" accept=".xlsx,.xls,.csv"
+               style="font-size:13px;margin-bottom:12px;display:block;">
+        <button class="btn btn-success" onclick="procesarMasivoCursos()">Procesar archivo</button>
+        <div id="masivo-cursos-resultado" style="margin-top:12px;font-size:13px;"></div>
+      </div>
+    </div>
+
+    <!-- Alta individual -->
+    <div class="card">
+      <div class="card-header"><h2>Agregar capacitación individual</h2></div>
+      <div class="card-body">
+        <div class="form-group"><label>Título *</label><input type="text" id="c-titulo" placeholder="Ej: BPM avanzado"></div>
+        <div class="form-row-3">
+          <div class="form-group">
+            <label>Tipo</label>
+            <select id="c-tipo">
+              <option>BPM</option><option>Seguridad</option><option>Calidad</option>
+              <option>Ambiental</option><option>Otro</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Responsable</label><input type="text" id="c-responsable" placeholder="Nombre del responsable"></div>
+          <div class="form-group"><label>Duración (hs)</label><input type="number" id="c-horas" placeholder="2.0" step="0.5"></div>
+        </div>
+        <div class="form-group">
+          <label>Temario (opcional)</label>
+          <textarea id="c-temario" rows="2" placeholder="Temas principales separados por · "></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Capacitaciones (<span id="cursos-count">0</span>)</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="ver-cursos-inactivos" onchange="cargarCursos()" style="width:auto;"> Ver desactivadas
+          </label>
+          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-cursos', this.value, [0,1,2])">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-cursos">
+          <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th>Acción</th></tr></thead>
+          <tbody id="body-cursos"><tr class="empty-row"><td colspan="6">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL: EDITAR EMPLEADO -->
+<div class="overlay" id="modal-emp">
+  <div class="modal">
+    <h3>Editar empleado</h3>
+    <input type="hidden" id="edit-emp-id">
+    <div class="form-row">
+      <div class="form-group"><label>DNI/Legajo</label><input type="text" id="edit-emp-legajo"></div>
+      <div class="form-group"><label>Nombre y apellido</label><input type="text" id="edit-emp-nombre"></div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label>Centro</label>
+        <input list="dl-centros" id="edit-emp-centro" placeholder="Elegí o escribí uno nuevo">
+      </div>
+      <div class="form-group">
+        <label>Sector</label>
+        <input list="dl-sectores" id="edit-emp-sector" placeholder="Elegí o escribí uno nuevo">
+      </div>
+      <div class="form-group">
+        <label>Contrato</label>
+        <input list="dl-contratos" id="edit-emp-contrato" placeholder="Elegí o escribí uno nuevo">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Género</label>
+        <input list="dl-generos" id="edit-emp-genero" placeholder="Elegí o escribí uno nuevo">
+      </div>
+      <div class="form-group">
+        <label>Convenio</label>
+        <input list="dl-convenios" id="edit-emp-convenio" placeholder="Elegí o escribí uno nuevo">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+      <button class="btn btn-outline" onclick="cerrarModalEmp()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEmp()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR CURSO -->
+<div class="overlay" id="modal-curso">
+  <div class="modal">
+    <h3>Editar capacitación</h3>
+    <input type="hidden" id="edit-curso-id">
+    <div class="form-group"><label>Título</label><input type="text" id="edit-curso-titulo"></div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label>Tipo</label>
+        <select id="edit-curso-tipo">
+          <option>BPM</option><option>Seguridad</option><option>Calidad</option>
+          <option>Ambiental</option><option>Otro</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Responsable</label><input type="text" id="edit-curso-responsable"></div>
+      <div class="form-group"><label>Duración (hs)</label><input type="number" id="edit-curso-horas" step="0.5"></div>
+    </div>
+    <div class="form-group">
+      <label>Temario</label>
+      <textarea id="edit-curso-temario" rows="2"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+      <button class="btn btn-outline" onclick="cerrarModalCurso()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCurso()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://hxdyobticojtiztkgpri.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4ZHlvYnRpY29qdGl6dGtncHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5OTQ4MTYsImV4cCI6MjA5ODU3MDgxNn0.5__ql02n2WMO_PWZlOHK8hmVVhhwL2K_cLEbNEH0-VQ';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let sortState = {};
+let datosGlobales = { sesiones: [], asistencias: [], empleados: [] };
+
+window.addEventListener('load', () => {
+  const hoy = new Date();
+  document.getElementById('f-desde').value = hoy.getFullYear() + '-01-01';
+  document.getElementById('f-hasta').value = hoy.toISOString().slice(0,10);
+  inicializarPeriodos();
+  cargarTodo();
+});
+
+async function cargarTodo() {
+  await Promise.all([cargarSesiones(), cargarEmpleados(), cargarCursos(), cargarSectores(), cargarCursosFiltro(), cargarPlanCursos(), cargarPlan()]);
+}
+
+// ── PERÍODOS (ciclo julio–junio) ──
+function periodoActual() {
+  // Si estamos en jul-dic, el ciclo arranca este año. Si ene-jun, arrancó el año pasado.
+  const hoy = new Date();
+  return hoy.getMonth() + 1 >= 7 ? hoy.getFullYear() : hoy.getFullYear() - 1;
+}
+
+function nombrePeriodo(p) { return 'Jul ' + p + ' – Jun ' + (p + 1); }
+
+function inicializarPeriodos() {
+  const actual = periodoActual();
+  const opciones = [actual - 1, actual, actual + 1];
+  ['av-periodo', 'pl-periodo', 'pl-filtro-periodo', 'ses-periodo'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    opciones.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = nombrePeriodo(p);
+      if (p === actual) o.selected = true;
+      sel.appendChild(o);
+    });
+  });
+}
+
+const MESES = { 1:'Enero',2:'Febrero',3:'Marzo',4:'Abril',5:'Mayo',6:'Junio',7:'Julio',8:'Agosto',9:'Septiembre',10:'Octubre',11:'Noviembre',12:'Diciembre' };
+
+// Dado un mes (1-12) y el período, devuelve el año calendario real
+function anioDeMes(mes, periodo) { return mes >= 7 ? periodo : periodo + 1; }
+
+// ── SESIONES ──
+async function cargarSesiones() {
+  // Filtros
+  const periodo = parseInt(document.getElementById('ses-periodo')?.value) || periodoActual();
+  const centroF = document.getElementById('ses-centro')?.value || '';
+  const estadoF = document.getElementById('ses-estado')?.value || '';
+
+  // Rango del año fiscal: jul del periodo a jun del siguiente
+  const desde = periodo + '-07-01';
+  const hasta = (periodo + 1) + '-06-30';
+
+  let q = sb.from('sesiones')
+    .select('*, capacitaciones(titulo, tipo, duracion_horas)')
+    .gte('fecha', desde).lte('fecha', hasta)
+    .order('fecha', { ascending: false });
+  if (centroF) q = q.eq('centro', centroF);
+  if (estadoF) q = q.eq('estado', estadoF);
+  const { data: ses } = await q;
+
+  const sesiones = ses || [];
+  const sesIds = sesiones.map(s => s.id);
+
+  let asistencias = [];
+  if (sesIds.length) {
+    const { data: asi } = await sb.from('asistencias').select('sesion_id, empleado_id').in('sesion_id', sesIds).eq('anulada', false);
+    asistencias = asi || [];
+  }
+
+  const conteo = {};
+  asistencias.forEach(a => { conteo[a.sesion_id] = (conteo[a.sesion_id] || 0) + 1; });
+
+  document.getElementById('m-sesiones').textContent = sesiones.length;
+  document.getElementById('m-sesiones-sub').textContent = nombrePeriodo(periodo);
+  document.getElementById('m-asistencias').textContent = asistencias.length;
+  const personasU = new Set(asistencias.map(a => a.empleado_id)).size;
+  document.getElementById('m-personas').textContent = personasU;
+  const horas = sesiones.reduce((acc, s) => acc + (s.capacitaciones?.duracion_horas || 0), 0);
+  document.getElementById('m-horas').textContent = horas.toFixed(1);
+
+  const tbody = document.getElementById('body-sesiones');
+  if (!sesiones.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Sin sesiones para los filtros seleccionados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sesiones.map(s => {
+    const n = conteo[s.id] || 0;
+    const badge = s.estado === 'cerrada'
+      ? '<span class="badge badge-green">Cerrada</span>'
+      : '<span class="badge badge-yellow">Abierta</span>';
+    const pdf = s.pdf_url
+      ? '<a href="#" style="color:#1B4F8A;font-size:12px;" onclick="descargarPDF(\'' + s.pdf_url + '\')">Descargar</a>'
+      : '<span style="color:#bbb;font-size:12px;">—</span>';
+    return `<tr>
+      <td>${formatFecha(s.fecha)}</td>
+      <td style="font-weight:500;">${s.capacitaciones?.titulo || '—'}</td>
+      <td><span class="badge badge-blue">${s.capacitaciones?.tipo || '—'}</span></td>
+      <td>${s.centro || '—'}</td>
+      <td>${s.instructor || '—'}</td>
+      <td>${s.lugar || '—'}</td>
+      <td style="font-weight:600;">${n}</td>
+      <td>${badge}</td>
+      <td>${pdf}</td>
+      <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function borrarSesion(id, titulo, nAsistentes) {
+  const msg = nAsistentes > 0
+    ? `¿Eliminar la sesión "${titulo}"? Tiene ${nAsistentes} asistencia(s) firmada(s) que también se borrarán. Esta acción no se puede deshacer.`
+    : `¿Eliminar la sesión "${titulo}"? Esta acción no se puede deshacer.`;
+  if (!confirm(msg)) return;
+
+  // 1. Borrar archivos físicos del Storage (firmas y PDFs de esta sesión)
+  await borrarArchivosSesion(id);
+
+  // 2. Borrar asistencias de la sesión
+  const { error: e1 } = await sb.from('asistencias').delete().eq('sesion_id', id);
+  if (e1) { toast('Error al borrar asistencias: ' + e1.message); return; }
+
+  // 3. Borrar convocados de la sesión
+  await sb.from('convocados').delete().eq('sesion_id', id);
+
+  // 4. Borrar la sesión
+  const { error: e2 } = await sb.from('sesiones').delete().eq('id', id);
+  if (e2) { toast('Error al borrar la sesión: ' + e2.message); return; }
+
+  toast('Sesión eliminada.');
+  cargarSesiones();
+}
+
+// Borra todos los archivos (firmas y PDFs) de una sesión del Storage
+async function borrarArchivosSesion(sesionId) {
+  for (const bucket of ['firmas', 'pdfs']) {
+    try {
+      const { data: archivos } = await sb.storage.from(bucket).list(sesionId);
+      if (archivos && archivos.length) {
+        const paths = archivos.map(f => sesionId + '/' + f.name);
+        await sb.storage.from(bucket).remove(paths);
+      }
+    } catch (_) { /* si la carpeta no existe, seguir */ }
+  }
+}
+
+async function descargarPDF(path) {
+  const { data, error } = await sb.storage.from('pdfs').download(path);
+  if (error) { toast('No se pudo descargar el PDF.'); return; }
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url; a.download = path.split('/').pop(); a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── SEGUIMIENTO ──
+async function cargarSeguimiento() {
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+  const sector = document.getElementById('f-sector').value;
+  const tipo = document.getElementById('f-tipo').value;
+  if (!desde || !hasta) { toast('Seleccioná un rango de fechas.'); return; }
+
+  let qSes = sb.from('sesiones')
+    .select('*, capacitaciones(id, titulo, tipo, duracion_horas)')
+    .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
+  const { data: sesiones } = await qSes;
+  const sesIds = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo).map(s => s.id);
+
+  let asistencias = [];
+  if (sesIds.length) {
+    const { data } = await sb.from('asistencias')
+      .select('*, empleados(id, legajo, nombre, sector, contrato, genero, convenio)')
+      .in('sesion_id', sesIds).eq('anulada', false);
+    asistencias = data || [];
+  }
+
+  let qEmp = sb.from('empleados').select('*').eq('activo', true).order('nombre');
+  if (sector) qEmp = qEmp.eq('sector', sector);
+  const { data: empleados } = await qEmp;
+
+  const sesFiltradas = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo);
+  datosGlobales = { sesiones: sesFiltradas, asistencias, empleados: empleados || [] };
+
+  renderPorPersona();
+  renderPorCurso();
+  renderMatriz();
+}
+
+function renderPorPersona() {
+  const { sesiones, asistencias, empleados } = datosGlobales;
+  const rows = empleados.map(emp => {
+    const asiEmp = asistencias.filter(a => a.empleado_id === emp.id);
+    const sesU = [...new Set(asiEmp.map(a => a.sesion_id))];
+    const horas = sesU.reduce((acc, sid) => {
+      const s = sesiones.find(x => x.id === sid);
+      return acc + (s?.capacitaciones?.duracion_horas || 0);
+    }, 0);
+    const ultima = asiEmp.sort((a,b) => b.firmado_at > a.firmado_at ? 1 : -1)[0];
+    return { emp, count: sesU.length, horas, ultima: ultima ? formatFecha(ultima.firmado_at.slice(0,10)) : '—' };
+  });
+
+  const tbody = document.querySelector('#tbl-personas tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin datos.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${r.emp.legajo}</td>
+    <td style="font-weight:500;">${r.emp.nombre}</td>
+    <td>${r.emp.sector || '—'}</td>
+    <td>
+      <div class="prog">
+        <div class="prog-bar"><div class="prog-fill ${r.count > 3 ? 'green' : r.count === 0 ? 'red' : ''}" style="width:${Math.min(r.count*20,100)}%"></div></div>
+        <span style="font-weight:600;min-width:14px;">${r.count}</span>
+      </div>
+    </td>
+    <td>${r.horas.toFixed(1)} hs</td>
+    <td style="color:#aaa;">${r.ultima}</td>
+  </tr>`).join('');
+}
+
+function renderPorCurso() {
+  const { sesiones, asistencias } = datosGlobales;
+  const map = {};
+  sesiones.forEach(s => {
+    const cid = s.capacitaciones?.id;
+    if (!cid) return;
+    if (!map[cid]) map[cid] = { titulo: s.capacitaciones.titulo, tipo: s.capacitaciones.tipo, sesIds: new Set(), empIds: new Set(), sectores: {} };
+    map[cid].sesIds.add(s.id);
+  });
+  asistencias.forEach(a => {
+    const s = sesiones.find(x => x.id === a.sesion_id);
+    const cid = s?.capacitaciones?.id;
+    if (!cid || !map[cid]) return;
+    map[cid].empIds.add(a.empleado_id);
+    const sec = a.empleados?.sector || 'Sin sector';
+    map[cid].sectores[sec] = (map[cid].sectores[sec] || 0) + 1;
+  });
+  const rows = Object.values(map).sort((a,b) => b.empIds.size - a.empIds.size);
+  const tbody = document.querySelector('#tbl-cursos-seg tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin datos.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const secs = Object.entries(r.sectores).sort((a,b) => b[1]-a[1]).slice(0,3)
+      .map(([s,n]) => `<span class="badge badge-green" style="margin:1px;">${s}: ${n}</span>`).join(' ');
+    return `<tr>
+      <td style="font-weight:500;">${r.titulo}</td>
+      <td><span class="badge badge-blue">${r.tipo || '—'}</span></td>
+      <td>${r.sesIds.size}</td>
+      <td style="font-weight:600;">${r.empIds.size}</td>
+      <td>${secs || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMatriz() {
+  const { sesiones, asistencias, empleados } = datosGlobales;
+  const capsMap = {};
+  sesiones.forEach(s => { if (s.capacitaciones?.id) capsMap[s.capacitaciones.id] = s.capacitaciones.titulo; });
+  const caps = Object.entries(capsMap);
+  const asiSet = {};
+  asistencias.forEach(a => {
+    const s = sesiones.find(x => x.id === a.sesion_id);
+    if (s?.capacitaciones?.id) asiSet[a.empleado_id + '_' + s.capacitaciones.id] = true;
+  });
+  const wrap = document.getElementById('matriz-wrap');
+  if (!caps.length || !empleados.length) { wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">Sin datos.</div>'; return; }
+
+  let html = '<table class="matriz-table"><thead><tr><th>Persona</th>';
+  caps.forEach(([,t]) => { html += `<th title="${t}" style="max-width:70px;font-size:10px;">${t.length > 14 ? t.slice(0,14)+'…' : t}</th>`; });
+  html += '</tr></thead><tbody>';
+  empleados.forEach(emp => {
+    const total = caps.filter(([cid]) => asiSet[emp.id+'_'+cid]).length;
+    const pct = caps.length ? Math.round(total/caps.length*100) : 0;
+    html += `<tr><td><div style="font-weight:500;">${emp.nombre}</div><div style="font-size:10px;color:#aaa;">${emp.sector||'—'} · ${pct}%</div></td>`;
+    caps.forEach(([cid]) => { html += `<td><span class="${asiSet[emp.id+'_'+cid] ? 'check-si' : 'check-no'}">${asiSet[emp.id+'_'+cid] ? '✓' : '—'}</span></td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function cargarFaltantes() {
+  const cursoId = document.getElementById('f-curso-faltante').value;
+  if (!cursoId) { toast('Seleccioná un curso.'); return; }
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+
+  const { data: ses } = await sb.from('sesiones').select('id')
+    .eq('capacitacion_id', cursoId).eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
+  const sesIds = (ses || []).map(s => s.id);
+
+  let asistieronIds = new Set();
+  if (sesIds.length) {
+    const { data } = await sb.from('asistencias').select('empleado_id').in('sesion_id', sesIds).eq('anulada', false);
+    asistieronIds = new Set((data || []).map(a => a.empleado_id));
+  }
+
+  const sector = document.getElementById('f-sector').value;
+  let q = sb.from('empleados').select('*').eq('activo', true).order('nombre');
+  if (sector) q = q.eq('sector', sector);
+  const { data: todos } = await q;
+
+  const ausentes = (todos || []).filter(e => !asistieronIds.has(e.id));
+  const tbody = document.querySelector('#tbl-faltantes tbody');
+  if (!ausentes.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Todos asistieron en el período.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ausentes.map(e => `<tr>
+    <td>${e.legajo}</td>
+    <td style="font-weight:500;color:#c0392b;">${e.nombre}</td>
+    <td>${e.sector||'—'}</td>
+    <td>${e.contrato||'—'}</td>
+  </tr>`).join('');
+}
+
+async function exportarExcel() {
+  let { sesiones, asistencias, empleados } = datosGlobales;
+  // Si no hay datos cargados, cargarlos primero
+  if (!asistencias.length) {
+    await cargarSeguimiento();
+    ({ sesiones, asistencias, empleados } = datosGlobales);
+  }
+  if (!asistencias.length) { toast('No hay asistencias en el período seleccionado.'); return; }
+  const wb = XLSX.utils.book_new();
+
+  const det = [['Fecha','Capacitacion','Tipo','Legajo','Nombre','Sector','Contrato','Genero','Convenio','Hora firma','Instructor']];
+  asistencias.forEach(a => {
+    const s = sesiones.find(x => x.id === a.sesion_id);
+    det.push([formatFecha(s?.fecha||''), s?.capacitaciones?.titulo||'', s?.capacitaciones?.tipo||'',
+      a.empleados?.legajo||'', a.empleados?.nombre||'', a.empleados?.sector||'', a.empleados?.contrato||'', a.empleados?.genero||'', a.empleados?.convenio||'',
+      a.firmado_at ? new Date(a.firmado_at).toLocaleString('es-AR') : '', s?.instructor||'']);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Detalle');
+
+  const res = [['Legajo','Nombre','Sector','Contrato','Capacitaciones','Horas','Ultima']];
+  empleados.forEach(emp => {
+    const asiEmp = asistencias.filter(a => a.empleado_id === emp.id);
+    const sesU = [...new Set(asiEmp.map(a => a.sesion_id))];
+    const horas = sesU.reduce((acc, sid) => { const s = sesiones.find(x => x.id === sid); return acc + (s?.capacitaciones?.duracion_horas||0); }, 0);
+    const ultima = asiEmp.sort((a,b) => b.firmado_at > a.firmado_at ? 1 : -1)[0];
+    res.push([emp.legajo, emp.nombre, emp.sector||'', emp.contrato||'', sesU.length, horas, ultima ? formatFecha(ultima.firmado_at.slice(0,10)) : '']);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Por persona');
+
+  const capsMap = {};
+  sesiones.forEach(s => { if (s.capacitaciones?.id) capsMap[s.capacitaciones.id] = s.capacitaciones.titulo; });
+  const caps = Object.entries(capsMap);
+  const asiSet = {};
+  asistencias.forEach(a => { const s = sesiones.find(x => x.id === a.sesion_id); if (s?.capacitaciones?.id) asiSet[a.empleado_id+'_'+s.capacitaciones.id] = true; });
+  const mat = [['Legajo','Nombre','Sector',...caps.map(([,t]) => t)]];
+  empleados.forEach(emp => { mat.push([emp.legajo, emp.nombre, emp.sector||'', ...caps.map(([cid]) => asiSet[emp.id+'_'+cid] ? 'Si' : '')]); });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mat), 'Matriz');
+
+  const desde = document.getElementById('f-desde').value;
+  const hasta = document.getElementById('f-hasta').value;
+  XLSX.writeFile(wb, 'Capacitaciones_' + desde + '_' + hasta + '.xlsx');
+  toast('Excel generado correctamente.');
+}
+
+// ── EMPLEADOS ──
+async function cargarEmpleados() {
+  const verInactivos = document.getElementById('ver-inactivos')?.checked;
+  let q = sb.from('empleados').select('*').order('auto_agregado', { ascending: false }).order('nombre');
+  if (!verInactivos) q = q.eq('activo', true);
+  const { data } = await q;
+
+  const tbody = document.getElementById('body-emp');
+  document.getElementById('emp-count').textContent = data ? data.length : 0;
+  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Sin empleados.</td></tr>'; return; }
+
+  // Aviso de pendientes de validar
+  const pendientes = data.filter(e => e.auto_agregado && e.activo).length;
+  const avisoEl = document.getElementById('aviso-pendientes');
+  if (avisoEl) {
+    avisoEl.innerHTML = pendientes
+      ? '<div style="background:#FEF3C7;color:#92400E;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;">⚠ ' + pendientes + ' empleado(s) se auto-agregaron desde la tablet y están pendientes de validar (completá contrato, género y convenio).</div>'
+      : '';
+  }
+
+  tbody.innerHTML = data.map(e => {
+    const inactivo = !e.activo;
+    const bg = inactivo ? 'style="background:#F5F5F5;opacity:0.7;"' : (e.auto_agregado ? 'style="background:#FEFCE8;"' : '');
+    let acciones = '';
+    if (inactivo) {
+      acciones = `<button class="btn btn-success btn-sm" onclick="reactivarEmp('${e.id}')">Reactivar</button> `;
+    } else {
+      if (e.auto_agregado) acciones += `<button class="btn btn-success btn-sm" onclick="validarEmp('${e.id}')">Validar</button> `;
+      acciones += `<button class="btn btn-outline btn-sm" onclick="editarEmp('${e.id}')">Editar</button> `;
+      acciones += `<button class="btn btn-outline btn-sm" onclick="darBajaEmp('${e.id}')">Dar de baja</button> `;
+    }
+    acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarEmp('${e.id}', '${e.nombre.replace(/'/g,'')}')">Eliminar</button>`;
+
+    return `<tr ${bg}>
+      <td>${e.legajo}</td>
+      <td style="font-weight:500;">${e.nombre}${inactivo ? ' <span class="badge badge-gray">Baja</span>' : (e.auto_agregado ? ' <span class="badge badge-yellow">Pendiente</span>' : '')}</td>
+      <td>${e.centro||'—'}</td>
+      <td>${e.sector||'—'}</td>
+      <td>${e.contrato||'—'}</td>
+      <td>${e.genero||'—'}</td>
+      <td>${e.convenio||'—'}</td>
+      <td>${acciones}</td>
+    </tr>`;
+  }).join('');
+
+  const sectores = [...new Set(data.map(e => e.sector).filter(Boolean))].sort();
+  const sel = document.getElementById('f-sector');
+  sel.innerHTML = '<option value="">Todos</option>';
+  sectores.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+
+  // Poblar los datalist solo con los valores que ya existen entre los empleados
+  poblarDatalist('dl-centros', data.map(e => e.centro));
+  poblarDatalist('dl-sectores', data.map(e => e.sector));
+  poblarDatalist('dl-contratos', data.map(e => e.contrato));
+  poblarDatalist('dl-generos', data.map(e => e.genero));
+  poblarDatalist('dl-convenios', data.map(e => e.convenio));
+}
+
+function poblarDatalist(datalistId, valoresExistentes, predefinidos = []) {
+  const dl = document.getElementById(datalistId);
+  if (!dl) return;
+  const todos = [...new Set([...predefinidos, ...valoresExistentes.filter(Boolean)])].sort();
+  dl.innerHTML = todos.map(v => `<option value="${v}">`).join('');
+}
+
+async function validarEmp(id) {
+  await sb.from('empleados').update({ auto_agregado: false }).eq('id', id);
+  toast('Empleado validado.');
+  cargarEmpleados();
+}
+
+async function agregarEmpleado() {
+  const legajo = document.getElementById('e-legajo').value.trim();
+  const nombre = document.getElementById('e-nombre').value.trim();
+  const centro = document.getElementById('e-centro').value.trim();
+  const sector = document.getElementById('e-sector').value.trim();
+  const contrato = document.getElementById('e-contrato').value.trim();
+  const genero = document.getElementById('e-genero').value.trim();
+  const convenio = document.getElementById('e-convenio').value.trim();
+  if (!legajo || !nombre) { toast('Completá legajo y nombre.'); return; }
+  const { error } = await sb.from('empleados').insert({ legajo, nombre, centro, sector, contrato, genero, convenio });
+  if (error) { toast(error.message.includes('unique') ? 'Ese legajo ya existe.' : 'Error al guardar.'); return; }
+  document.getElementById('e-legajo').value = '';
+  document.getElementById('e-nombre').value = '';
+  toast('Empleado agregado.');
+  cargarEmpleados();
+}
+
+// ── CARGA MASIVA ──
+function descargarPlantilla() {
+  const rows = [
+    ['legajo', 'nombre', 'centro', 'sector', 'contrato', 'genero', 'convenio'],
+    ['4521', 'Juan Pérez', 'Bella Vista', 'Envasado', 'Efectivo', 'Masculino', 'Dentro de convenio'],
+    ['4587', 'Ana López', 'San Rafael', 'Calidad', 'Temporada', 'Femenino', 'Fuera de convenio']
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Empleados');
+  XLSX.writeFile(wb, 'Plantilla_empleados.xlsx');
+}
+
+async function procesarMasivo() {
+  const input = document.getElementById('file-masivo');
+  const res = document.getElementById('masivo-resultado');
+  if (!input.files.length) { toast('Seleccioná un archivo primero.'); return; }
+
+  res.innerHTML = '<span style="color:#888;">Procesando...</span>';
+
+  try {
+    const file = input.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rows.length) { res.innerHTML = '<span style="color:#c0392b;">El archivo está vacío.</span>'; return; }
+
+    // Normalizar columnas (acepta variaciones de mayúsculas/acentos)
+    const empleados = rows.map(r => {
+      const get = (keys) => {
+        for (const k of Object.keys(r)) {
+          const kn = k.toLowerCase().trim().replace(/é/g,'e').replace(/í/g,'i');
+          if (keys.includes(kn)) return String(r[k]).trim();
+        }
+        return '';
+      };
+      return {
+        legajo: get(['legajo']),
+        nombre: get(['nombre', 'nombre y apellido', 'apellido y nombre']),
+        centro: get(['centro', 'centro productivo', 'planta']),
+        sector: get(['sector']),
+        contrato: get(['contrato']),
+        genero: get(['genero', 'género', 'sexo']),
+        convenio: get(['convenio'])
+      };
+    }).filter(e => e.legajo && e.nombre);
+
+    if (!empleados.length) {
+      res.innerHTML = '<span style="color:#c0392b;">No se encontraron filas válidas. Revisá que las columnas se llamen legajo y nombre.</span>';
+      return;
+    }
+
+    // Insertar con upsert (actualiza si el legajo ya existe)
+    const { error } = await sb.from('empleados').upsert(empleados, { onConflict: 'legajo' });
+
+    if (error) {
+      res.innerHTML = '<span style="color:#c0392b;">Error: ' + error.message + '</span>';
+      return;
+    }
+
+    res.innerHTML = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + empleados.length + ' empleados cargados correctamente.</span>';
+    input.value = '';
+    cargarEmpleados();
+  } catch (err) {
+    res.innerHTML = '<span style="color:#c0392b;">Error al leer el archivo: ' + err.message + '</span>';
+  }
+}
+
+async function darBajaEmp(id) {
+  if (!confirm('¿Dar de baja este empleado? Podés reactivarlo después.')) return;
+  await sb.from('empleados').update({ activo: false }).eq('id', id);
+  toast('Empleado dado de baja.');
+  cargarEmpleados();
+}
+
+async function reactivarEmp(id) {
+  await sb.from('empleados').update({ activo: true }).eq('id', id);
+  toast('Empleado reactivado.');
+  cargarEmpleados();
+}
+
+async function eliminarEmp(id, nombre) {
+  // Contar asistencias del empleado
+  const { count } = await sb.from('asistencias').select('id', { count: 'exact', head: true }).eq('empleado_id', id);
+  const n = count || 0;
+  const msg = n > 0
+    ? `¿Eliminar definitivamente a "${nombre}"? Tiene ${n} firma(s) registrada(s) que también se borrarán. Esta acción NO se puede deshacer.`
+    : `¿Eliminar definitivamente a "${nombre}"? Esta acción NO se puede deshacer.`;
+  if (!confirm(msg)) return;
+
+  // Borrar los archivos de firma de este empleado (están como {empleado_id}_{timestamp}.png en cada sesión)
+  const { data: asisEmp } = await sb.from('asistencias').select('firma_url').eq('empleado_id', id);
+  const pathsAEliminar = (asisEmp || [])
+    .map(a => a.firma_url)
+    .filter(u => u && !u.startsWith('data:'));  // los que son path real, no base64
+  if (pathsAEliminar.length) {
+    try { await sb.storage.from('firmas').remove(pathsAEliminar); } catch (_) {}
+  }
+
+  // Borrar asistencias y convocatorias asociadas, luego el empleado
+  await sb.from('asistencias').delete().eq('empleado_id', id);
+  await sb.from('convocados').delete().eq('empleado_id', id);
+  const { error } = await sb.from('empleados').delete().eq('id', id);
+  if (error) { toast('Error al eliminar: ' + error.message); return; }
+  toast('Empleado eliminado definitivamente.');
+  cargarEmpleados();
+}
+
+async function editarEmp(id) {
+  const { data } = await sb.from('empleados').select('*').eq('id', id).single();
+  if (!data) { toast('No se encontró el empleado.'); return; }
+  document.getElementById('edit-emp-id').value = data.id;
+  document.getElementById('edit-emp-legajo').value = data.legajo || '';
+  document.getElementById('edit-emp-nombre').value = data.nombre || '';
+  document.getElementById('edit-emp-centro').value = data.centro || '';
+  document.getElementById('edit-emp-sector').value = data.sector || '';
+  document.getElementById('edit-emp-contrato').value = data.contrato || '';
+  document.getElementById('edit-emp-genero').value = data.genero || '';
+  document.getElementById('edit-emp-convenio').value = data.convenio || '';
+  document.getElementById('modal-emp').classList.add('open');
+}
+
+function cerrarModalEmp() {
+  document.getElementById('modal-emp').classList.remove('open');
+}
+
+async function guardarEmp() {
+  const id = document.getElementById('edit-emp-id').value;
+  const legajo = document.getElementById('edit-emp-legajo').value.trim();
+  const nombre = document.getElementById('edit-emp-nombre').value.trim();
+  if (!legajo || !nombre) { toast('Completá legajo y nombre.'); return; }
+  const { error } = await sb.from('empleados').update({
+    legajo, nombre,
+    centro: document.getElementById('edit-emp-centro').value.trim(),
+    sector: document.getElementById('edit-emp-sector').value.trim(),
+    contrato: document.getElementById('edit-emp-contrato').value.trim(),
+    genero: document.getElementById('edit-emp-genero').value.trim(),
+    convenio: document.getElementById('edit-emp-convenio').value.trim(),
+    auto_agregado: false
+  }).eq('id', id);
+  if (error) { toast(error.message.includes('unique') ? 'Ese legajo ya existe.' : 'Error al guardar.'); return; }
+  cerrarModalEmp();
+  toast('Empleado actualizado.');
+  cargarEmpleados();
+}
+
+// ── CURSOS ──
+async function cargarCursos() {
+  const verInactivos = document.getElementById('ver-cursos-inactivos')?.checked;
+  let q = sb.from('capacitaciones').select('*').order('codigo');
+  if (!verInactivos) q = q.eq('activa', true);
+  const { data } = await q;
+
+  const tbody = document.getElementById('body-cursos');
+  document.getElementById('cursos-count').textContent = data ? data.length : 0;
+  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin capacitaciones.</td></tr>'; return; }
+  tbody.innerHTML = data.map(c => {
+    const inactivo = !c.activa;
+    const bg = inactivo ? 'style="background:#F5F5F5;opacity:0.7;"' : '';
+    let acciones = '';
+    if (inactivo) {
+      acciones = `<button class="btn btn-success btn-sm" onclick="reactivarCurso('${c.id}')">Reactivar</button> `;
+    } else {
+      acciones = `<button class="btn btn-outline btn-sm" onclick="editarCurso('${c.id}')">Editar</button> `;
+      acciones += `<button class="btn btn-outline btn-sm" onclick="darBajaCurso('${c.id}')">Desactivar</button> `;
+    }
+    acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarCurso('${c.id}', '${c.titulo.replace(/'/g,'')}')">Eliminar</button>`;
+    return `<tr ${bg}>
+      <td><span class="badge badge-gray">${c.codigo||'—'}</span></td>
+      <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}</td>
+      <td><span class="badge badge-blue">${c.tipo||'—'}</span></td>
+      <td>${c.responsable||'—'}</td>
+      <td>${c.duracion_horas||'—'} hs</td>
+      <td>${acciones}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function cargarCursosFiltro() {
+  const { data } = await sb.from('capacitaciones').select('id, titulo, codigo').eq('activa', true).order('codigo');
+  const sel = document.getElementById('f-curso-faltante');
+  sel.innerHTML = '<option value="">Seleccioná un curso...</option>';
+  (data || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = (c.codigo ? c.codigo + ' · ' : '') + c.titulo; sel.appendChild(o); });
+}
+
+async function agregarCurso() {
+  const titulo = document.getElementById('c-titulo').value.trim();
+  const tipo = document.getElementById('c-tipo').value;
+  const responsable = document.getElementById('c-responsable').value.trim();
+  const horas = parseFloat(document.getElementById('c-horas').value) || null;
+  const temario = document.getElementById('c-temario').value.trim();
+  if (!titulo) { toast('Completá el título.'); return; }
+  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario });
+  if (error) { toast('Error al guardar.'); return; }
+  document.getElementById('c-titulo').value = '';
+  document.getElementById('c-responsable').value = '';
+  document.getElementById('c-horas').value = '';
+  document.getElementById('c-temario').value = '';
+  toast('Capacitación agregada.');
+  cargarCursos();
+  cargarCursosFiltro();
+  cargarPlanCursos();
+}
+
+// ── CARGA MASIVA CURSOS ──
+function descargarPlantillaCursos() {
+  const rows = [
+    ['titulo', 'tipo', 'responsable', 'duracion'],
+    ['BPM y manipulación de alimentos', 'BPM', 'M. González', 2],
+    ['Uso de EPP', 'Seguridad', 'J. Pérez', 1.5]
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Cursos');
+  XLSX.writeFile(wb, 'Plantilla_cursos.xlsx');
+}
+
+async function procesarMasivoCursos() {
+  const input = document.getElementById('file-masivo-cursos');
+  const res = document.getElementById('masivo-cursos-resultado');
+  if (!input.files.length) { toast('Seleccioná un archivo primero.'); return; }
+  res.innerHTML = '<span style="color:#888;">Procesando...</span>';
+
+  try {
+    const buf = await input.files[0].arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    if (!rows.length) { res.innerHTML = '<span style="color:#c0392b;">El archivo está vacío.</span>'; return; }
+
+    const cursos = rows.map(r => {
+      const get = (keys) => {
+        for (const k of Object.keys(r)) {
+          const kn = k.toLowerCase().trim().replace(/ó/g,'o').replace(/á/g,'a').replace(/í/g,'i');
+          if (keys.includes(kn)) return String(r[k]).trim();
+        }
+        return '';
+      };
+      const dur = get(['duracion', 'duracion del curso', 'tiempo', 'tiempo duracion del curso', 'horas']);
+      return {
+        titulo: get(['titulo', 'titulo de capacitacion', 'titulo de la capacitacion', 'capacitacion']),
+        tipo: get(['tipo', 'tipo de capacitacion']),
+        responsable: get(['responsable', 'responsable del curso']),
+        duracion_horas: parseFloat(dur) || null
+      };
+    }).filter(c => c.titulo);
+
+    if (!cursos.length) {
+      res.innerHTML = '<span style="color:#c0392b;">No se encontraron cursos válidos. Revisá que exista la columna titulo.</span>';
+      return;
+    }
+
+    const { error } = await sb.from('capacitaciones').insert(cursos);
+    if (error) { res.innerHTML = '<span style="color:#c0392b;">Error: ' + error.message + '</span>'; return; }
+
+    res.innerHTML = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + cursos.length + ' capacitaciones cargadas. Los códigos se asignaron automáticamente.</span>';
+    input.value = '';
+    cargarCursos();
+    cargarCursosFiltro();
+    cargarPlanCursos();
+  } catch (err) {
+    res.innerHTML = '<span style="color:#c0392b;">Error al leer el archivo: ' + err.message + '</span>';
+  }
+}
+
+async function darBajaCurso(id) {
+  if (!confirm('¿Desactivar esta capacitación? Podés reactivarla después.')) return;
+  await sb.from('capacitaciones').update({ activa: false }).eq('id', id);
+  toast('Capacitación desactivada.');
+  cargarCursos();
+  cargarCursosFiltro();
+  cargarPlanCursos();
+}
+
+async function reactivarCurso(id) {
+  await sb.from('capacitaciones').update({ activa: true }).eq('id', id);
+  toast('Capacitación reactivada.');
+  cargarCursos();
+  cargarCursosFiltro();
+  cargarPlanCursos();
+}
+
+async function eliminarCurso(id, titulo) {
+  // Contar sesiones del curso
+  const { count } = await sb.from('sesiones').select('id', { count: 'exact', head: true }).eq('capacitacion_id', id);
+  const n = count || 0;
+  const msg = n > 0
+    ? `¿Eliminar definitivamente "${titulo}"? Tiene ${n} sesión(es) dictada(s) que también se borrarán, junto con sus firmas. Esta acción NO se puede deshacer.`
+    : `¿Eliminar definitivamente "${titulo}"? Esta acción NO se puede deshacer.`;
+  if (!confirm(msg)) return;
+
+  // Borrar en orden: archivos, asistencias y convocados de las sesiones del curso, luego sesiones, plan y curso
+  const { data: ses } = await sb.from('sesiones').select('id').eq('capacitacion_id', id);
+  const sesIds = (ses || []).map(s => s.id);
+  if (sesIds.length) {
+    // Borrar archivos físicos de cada sesión
+    for (const sid of sesIds) {
+      await borrarArchivosSesion(sid);
+    }
+    await sb.from('asistencias').delete().in('sesion_id', sesIds);
+    await sb.from('convocados').delete().in('sesion_id', sesIds);
+    await sb.from('sesiones').delete().eq('capacitacion_id', id);
+  }
+  await sb.from('plan_capacitacion').delete().eq('capacitacion_id', id);
+  const { error } = await sb.from('capacitaciones').delete().eq('id', id);
+  if (error) { toast('Error al eliminar: ' + error.message); return; }
+  toast('Capacitación eliminada definitivamente.');
+  cargarCursos();
+  cargarCursosFiltro();
+  cargarPlanCursos();
+}
+
+async function editarCurso(id) {
+  const { data } = await sb.from('capacitaciones').select('*').eq('id', id).single();
+  if (!data) { toast('No se encontró el curso.'); return; }
+  document.getElementById('edit-curso-id').value = data.id;
+  document.getElementById('edit-curso-titulo').value = data.titulo || '';
+  document.getElementById('edit-curso-tipo').value = data.tipo || 'BPM';
+  document.getElementById('edit-curso-responsable').value = data.responsable || '';
+  document.getElementById('edit-curso-horas').value = data.duracion_horas || '';
+  document.getElementById('edit-curso-temario').value = data.temario || '';
+  document.getElementById('modal-curso').classList.add('open');
+}
+
+function cerrarModalCurso() {
+  document.getElementById('modal-curso').classList.remove('open');
+}
+
+async function guardarCurso() {
+  const id = document.getElementById('edit-curso-id').value;
+  const titulo = document.getElementById('edit-curso-titulo').value.trim();
+  if (!titulo) { toast('Completá el título.'); return; }
+  const { error } = await sb.from('capacitaciones').update({
+    titulo,
+    tipo: document.getElementById('edit-curso-tipo').value,
+    responsable: document.getElementById('edit-curso-responsable').value.trim(),
+    duracion_horas: parseFloat(document.getElementById('edit-curso-horas').value) || null,
+    temario: document.getElementById('edit-curso-temario').value.trim()
+  }).eq('id', id);
+  if (error) { toast('Error al guardar.'); return; }
+  cerrarModalCurso();
+  toast('Capacitación actualizada.');
+  cargarCursos();
+  cargarCursosFiltro();
+  cargarPlanCursos();
+}
+
+async function cargarSectores() {
+  const { data } = await sb.from('empleados').select('sector').eq('activo', true);
+  const sectores = [...new Set((data||[]).map(e => e.sector).filter(Boolean))].sort();
+  const sel = document.getElementById('f-sector');
+  sel.innerHTML = '<option value="">Todos</option>';
+  sectores.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+}
+
+// ── PLAN DE CAPACITACIÓN ──
+async function cargarPlanCursos() {
+  const { data } = await sb.from('capacitaciones').select('id, titulo, codigo').eq('activa', true).order('codigo');
+  const sel = document.getElementById('pl-curso');
+  if (sel) {
+    sel.innerHTML = '<option value="">Seleccioná...</option>';
+    (data || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = (c.codigo ? c.codigo + ' · ' : '') + c.titulo; sel.appendChild(o); });
+  }
+}
+
+async function agregarPlan() {
+  const cap = document.getElementById('pl-curso').value;
+  const centro = document.getElementById('pl-centro').value;
+  const mes = parseInt(document.getElementById('pl-mes').value);
+  const periodo = parseInt(document.getElementById('pl-periodo').value);
+  if (!cap) { toast('Seleccioná una capacitación.'); return; }
+
+  const { error } = await sb.from('plan_capacitacion')
+    .upsert({ capacitacion_id: cap, centro, mes, periodo }, { onConflict: 'capacitacion_id,centro,periodo' });
+  if (error) { toast('Error: ' + error.message); return; }
+  toast('Agregado al plan.');
+  cargarPlan();
+}
+
+async function cargarPlan() {
+  const periodo = parseInt(document.getElementById('pl-filtro-periodo').value) || periodoActual();
+  const { data } = await sb.from('plan_capacitacion')
+    .select('*, capacitaciones(titulo, codigo)')
+    .eq('periodo', periodo).order('mes');
+
+  const tbody = document.getElementById('body-plan');
+  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin planificaciones para este período.</td></tr>'; return; }
+
+  tbody.innerHTML = data.map(p => `<tr>
+    <td><span class="badge badge-gray">${p.capacitaciones?.codigo || '—'}</span></td>
+    <td style="font-weight:500;">${p.capacitaciones?.titulo || '—'}</td>
+    <td>${p.centro}</td>
+    <td>${MESES[p.mes]}</td>
+    <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarPlan('${p.id}')">Quitar</button></td>
+  </tr>`).join('');
+}
+
+async function borrarPlan(id) {
+  if (!confirm('¿Quitar esta planificación?')) return;
+  await sb.from('plan_capacitacion').delete().eq('id', id);
+  toast('Quitado del plan.');
+  cargarPlan();
+}
+
+// ── AVANCE DEL PLAN ──
+async function cargarAvance() {
+  const periodo = parseInt(document.getElementById('av-periodo').value);
+  const centroFiltro = document.getElementById('av-centro').value;
+
+  // 1. Traer el plan del período
+  let qPlan = sb.from('plan_capacitacion')
+    .select('*, capacitaciones(titulo, codigo)')
+    .eq('periodo', periodo);
+  if (centroFiltro) qPlan = qPlan.eq('centro', centroFiltro);
+  const { data: plan } = await qPlan;
+
+  if (!plan || !plan.length) {
+    document.getElementById('av-planificadas').textContent = '0';
+    document.getElementById('av-realizadas').textContent = '0';
+    document.getElementById('av-pendientes').textContent = '0';
+    document.getElementById('av-pct').textContent = '—';
+    document.getElementById('avance-wrap').innerHTML = '<div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">No hay nada planificado para este período. Cargá el plan en la pestaña Plan.</div>';
+    return;
+  }
+
+  // 2. Traer sesiones cerradas del período (jul del periodo a jun del siguiente)
+  const desde = periodo + '-07-01';
+  const hasta = (periodo + 1) + '-06-30';
+  let qSes = sb.from('sesiones')
+    .select('id, capacitacion_id, centro, fecha')
+    .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
+  const { data: sesiones } = await qSes;
+
+  // 3. Asistencias de esas sesiones
+  const sesIds = (sesiones || []).map(s => s.id);
+  let asistencias = [];
+  let convocados = [];
+  if (sesIds.length) {
+    const { data: asi } = await sb.from('asistencias')
+      .select('sesion_id, empleado_id').in('sesion_id', sesIds).eq('anulada', false);
+    asistencias = asi || [];
+    const { data: conv } = await sb.from('convocados')
+      .select('sesion_id, empleado_id, empleados(id, legajo, nombre, sector)').in('sesion_id', sesIds);
+    convocados = conv || [];
+  }
+
+  // 4. Cruzar plan vs realizado
+  let realizadas = 0;
+  const filas = plan.map(p => {
+    // Sesiones que corresponden a este curso+centro
+    const sesDelPlan = (sesiones || []).filter(s =>
+      s.capacitacion_id === p.capacitacion_id && s.centro === p.centro);
+    const dictada = sesDelPlan.length > 0;
+    if (dictada) realizadas++;
+
+    const sesDelPlanIds = sesDelPlan.map(s => s.id);
+
+    // Quiénes asistieron (firmaron)
+    const asistieron = new Set(asistencias.filter(a => sesDelPlanIds.includes(a.sesion_id)).map(a => a.empleado_id));
+
+    // Quiénes estaban convocados (definidos por el instructor)
+    const convDelPlan = convocados.filter(c => sesDelPlanIds.includes(c.sesion_id));
+    const convocadosUnicos = {};
+    convDelPlan.forEach(c => { if (c.empleados) convocadosUnicos[c.empleado_id] = c.empleados; });
+
+    // Ausentes = convocados que no firmaron
+    const ausentes = Object.entries(convocadosUnicos)
+      .filter(([id]) => !asistieron.has(id))
+      .map(([, emp]) => emp);
+
+    const totalConvocados = Object.keys(convocadosUnicos).length;
+
+    return { plan: p, dictada, sesiones: sesDelPlan, asistieron: asistieron.size, totalConvocados, ausentes };
+  });
+
+  const planificadas = plan.length;
+  const pendientes = planificadas - realizadas;
+  const pct = planificadas ? Math.round(realizadas / planificadas * 100) : 0;
+
+  document.getElementById('av-planificadas').textContent = planificadas;
+  document.getElementById('av-realizadas').textContent = realizadas;
+  document.getElementById('av-realizadas-sub').textContent = pct + '% del plan';
+  document.getElementById('av-pendientes').textContent = pendientes;
+  document.getElementById('av-pct').textContent = pct + '%';
+
+  // Tabla detalle
+  const wrap = document.getElementById('avance-wrap');
+  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Asist./convoc.</th><th>Ausentes</th></tr></thead><tbody>';
+  filas.sort((a,b) => a.plan.mes - b.plan.mes).forEach(f => {
+    const estado = f.dictada
+      ? '<span class="badge badge-green">Dictada</span>'
+      : '<span class="badge badge-yellow">Pendiente</span>';
+    const ausentesTxt = f.dictada && f.ausentes.length
+      ? `<a href="#" style="color:#c0392b;" onclick="verAusentes('${f.plan.capacitacion_id}','${f.plan.centro}',${periodo});return false;">${f.ausentes.length} ausente(s)</a>`
+      : (f.dictada ? '<span style="color:#1A6B3C;">Todos</span>' : '—');
+    html += `<tr>
+      <td><span class="badge badge-gray">${f.plan.capacitaciones?.codigo || '—'}</span></td>
+      <td style="font-weight:500;">${f.plan.capacitaciones?.titulo || '—'}</td>
+      <td>${f.plan.centro}</td>
+      <td>${MESES[f.plan.mes]}</td>
+      <td>${estado}</td>
+      <td>${f.dictada ? f.asistieron + '/' + f.totalConvocados : '—'}</td>
+      <td>${ausentesTxt}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  // Guardar para el detalle de ausentes
+  window._avanceFilas = filas;
+}
+
+function verAusentes(capId, centro, periodo) {
+  const f = (window._avanceFilas || []).find(x => x.plan.capacitacion_id === capId && x.plan.centro === centro);
+  if (!f || !f.ausentes.length) { toast('Sin ausentes.'); return; }
+  const lista = f.ausentes.map(e => '• ' + e.nombre + ' (' + (e.sector || 's/sector') + ')').join('\n');
+  alert('Ausentes en ' + (f.plan.capacitaciones?.titulo || '') + ' — ' + centro + ':\n\n' + lista);
+}
+
+// ── HELPERS ──
+function tab(id, el) {
+  // Solo las pestañas principales (hijas directas de .container), no las sub-tabs
+  document.querySelectorAll('.container > .tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav > .nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  if (id === 't-avance') cargarAvance();
+}
+
+function subtab(id, el) {
+  const cont = el.closest('#t-seguimiento');
+  cont.querySelectorAll(':scope > .tab-content').forEach(t => t.classList.remove('active'));
+  el.parentElement.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+
+function filtrarTabla(tid, q, cols) {
+  document.querySelectorAll('#' + tid + ' tbody tr').forEach(row => {
+    const tds = row.querySelectorAll('td');
+    const match = cols.some(i => tds[i]?.textContent.toLowerCase().includes(q.toLowerCase()));
+    row.style.display = match ? '' : 'none';
+  });
+}
+
+function sort(tid, col) {
+  const tbody = document.querySelector('#' + tid + ' tbody');
+  const rows = [...tbody.querySelectorAll('tr')];
+  const key = tid + '_' + col;
+  const asc = sortState[key] !== true;
+  sortState[key] = asc;
+  rows.sort((a, b) => {
+    const va = a.querySelectorAll('td')[col]?.textContent.trim() || '';
+    const vb = b.querySelectorAll('td')[col]?.textContent.trim() || '';
+    const na = parseFloat(va); const nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+    return asc ? va.localeCompare(vb, 'es') : vb.localeCompare(va, 'es');
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+function formatFecha(iso) {
+  if (!iso) return '—';
+  const [y,m,d] = iso.slice(0,10).split('-');
+  return d+'/'+m+'/'+y;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
