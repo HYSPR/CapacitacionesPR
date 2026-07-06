@@ -279,13 +279,14 @@ tr:hover td { background: #fafeff; }
               <th onclick="sort('tbl-sesiones',4)">Instructor ↕</th>
               <th>Lugar</th>
               <th onclick="sort('tbl-sesiones',6)">Asistentes ↕</th>
+              <th>Costo/pers.</th>
               <th>Estado</th>
               <th>PDF</th>
               <th>Acción</th>
             </tr>
           </thead>
           <tbody id="body-sesiones">
-            <tr class="empty-row"><td colspan="10">Cargando...</td></tr>
+            <tr class="empty-row"><td colspan="11">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -583,6 +584,10 @@ tr:hover td { background: #fafeff; }
           <label style="font-size:13px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer;">
             <input type="checkbox" id="ver-inactivos" onchange="cargarEmpleados()" style="width:auto;"> Ver dados de baja
           </label>
+          <select id="f-emp-centro" onchange="cargarEmpleados()" style="padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;">
+            <option value="">Todos los centros</option>
+            <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+          </select>
           <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [0,1,2])">
         </div>
       </div>
@@ -635,6 +640,10 @@ tr:hover td { background: #fafeff; }
           <label>Temario (opcional)</label>
           <textarea id="c-temario" rows="2" placeholder="Temas principales separados por · "></textarea>
         </div>
+        <div class="form-group" style="max-width:33%;">
+          <label>Costo total del curso ($)</label>
+          <input type="number" id="c-costo" placeholder="0" step="0.01" min="0">
+        </div>
         <button class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
       </div>
     </div>
@@ -652,7 +661,7 @@ tr:hover td { background: #fafeff; }
       </div>
       <div class="table-wrap">
         <table id="tbl-cursos">
-          <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th>Costo</th><th>Acción</th></tr></thead>
           <tbody id="body-cursos"><tr class="empty-row"><td colspan="6">Cargando...</td></tr></tbody>
         </table>
       </div>
@@ -762,6 +771,10 @@ tr:hover td { background: #fafeff; }
       <label>Temario</label>
       <textarea id="edit-curso-temario" rows="2"></textarea>
     </div>
+    <div class="form-group" style="max-width:50%;">
+      <label>Costo total del curso ($)</label>
+      <input type="number" id="edit-curso-costo" step="0.01" min="0">
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
       <button class="btn btn-outline" onclick="cerrarModalCurso()">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarCurso()">Guardar cambios</button>
@@ -840,7 +853,7 @@ async function cargarSesiones() {
   const hasta = (periodo + 1) + '-06-30';
 
   let q = sb.from('sesiones')
-    .select('*, capacitaciones(titulo, tipo, duracion_horas)')
+    .select('*, capacitaciones(titulo, tipo, duracion_horas, costo)')
     .gte('fecha', desde).lte('fecha', hasta)
     .order('fecha', { ascending: false });
   if (centroF) q = q.eq('centro', centroF);
@@ -869,7 +882,7 @@ async function cargarSesiones() {
 
   const tbody = document.getElementById('body-sesiones');
   if (!sesiones.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="10">Sin sesiones para los filtros seleccionados.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="11">Sin sesiones para los filtros seleccionados.</td></tr>';
     return;
   }
   tbody.innerHTML = sesiones.map(s => {
@@ -880,6 +893,13 @@ async function cargarSesiones() {
     const pdf = s.pdf_url
       ? '<a href="#" style="color:#1B4F8A;font-size:12px;" onclick="descargarPDF(\'' + s.pdf_url + '\')">Descargar</a>'
       : '<span style="color:#bbb;font-size:12px;">—</span>';
+    // Costo por persona = costo total del curso / asistentes
+    const costoTotal = s.capacitaciones?.costo;
+    let costoPP = '—';
+    if (costoTotal != null) {
+      const pp = n > 0 ? costoTotal / n : costoTotal;
+      costoPP = '$' + Number(pp).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+    }
     return `<tr>
       <td>${formatFecha(s.fecha)}</td>
       <td style="font-weight:500;">${s.capacitaciones?.titulo || '—'}</td>
@@ -888,6 +908,7 @@ async function cargarSesiones() {
       <td>${s.instructor || '—'}</td>
       <td>${s.lugar || '—'}</td>
       <td style="font-weight:600;">${n}</td>
+      <td>${costoPP}</td>
       <td>${badge}</td>
       <td>${pdf}</td>
       <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button></td>
@@ -1147,9 +1168,11 @@ async function exportarExcel() {
 // ── EMPLEADOS ──
 async function cargarEmpleados() {
   const verInactivos = document.getElementById('ver-inactivos')?.checked;
+  const centroF = document.getElementById('f-emp-centro')?.value || '';
   let q = sb.from('empleados').select('*').order('auto_agregado', { ascending: false }).order('nombre');
   // Activado: solo dados de baja. Desactivado: solo activos.
   q = verInactivos ? q.eq('activo', false) : q.eq('activo', true);
+  if (centroF) q = q.eq('centro', centroF);
   const { data } = await q;
 
   const tbody = document.getElementById('body-emp');
@@ -1399,7 +1422,7 @@ async function cargarCursos() {
 
   const tbody = document.getElementById('body-cursos');
   document.getElementById('cursos-count').textContent = data ? data.length : 0;
-  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin capacitaciones.</td></tr>'; return; }
+  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Sin capacitaciones.</td></tr>'; return; }
   tbody.innerHTML = data.map(c => {
     const inactivo = !c.activa;
     const bg = inactivo ? 'style="background:#F5F5F5;opacity:0.7;"' : '';
@@ -1411,12 +1434,14 @@ async function cargarCursos() {
       acciones += `<button class="btn btn-outline btn-sm" onclick="darBajaCurso('${c.id}')">Desactivar</button> `;
     }
     acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarCurso('${c.id}', '${c.titulo.replace(/'/g,'')}')">Eliminar</button>`;
+    const costo = (c.costo != null) ? '$' + Number(c.costo).toLocaleString('es-AR') : '—';
     return `<tr ${bg}>
       <td><span class="badge badge-gray">${c.codigo||'—'}</span></td>
       <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}</td>
       <td><span class="badge badge-blue">${c.tipo||'—'}</span></td>
       <td>${c.responsable||'—'}</td>
       <td>${c.duracion_horas||'—'} hs</td>
+      <td>${costo}</td>
       <td>${acciones}</td>
     </tr>`;
   }).join('');
@@ -1435,13 +1460,15 @@ async function agregarCurso() {
   const responsable = document.getElementById('c-responsable').value.trim();
   const horas = parseFloat(document.getElementById('c-horas').value) || null;
   const temario = document.getElementById('c-temario').value.trim();
+  const costo = parseFloat(document.getElementById('c-costo').value) || 0;
   if (!titulo) { toast('Completá el título.'); return; }
-  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario });
+  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario, costo });
   if (error) { toast('Error al guardar.'); return; }
   document.getElementById('c-titulo').value = '';
   document.getElementById('c-responsable').value = '';
   document.getElementById('c-horas').value = '';
   document.getElementById('c-temario').value = '';
+  document.getElementById('c-costo').value = '';
   toast('Capacitación agregada.');
   cargarCursos();
   cargarCursosFiltro();
@@ -1563,6 +1590,7 @@ async function editarCurso(id) {
   document.getElementById('edit-curso-responsable').value = data.responsable || '';
   document.getElementById('edit-curso-horas').value = data.duracion_horas || '';
   document.getElementById('edit-curso-temario').value = data.temario || '';
+  document.getElementById('edit-curso-costo').value = (data.costo != null) ? data.costo : '';
   document.getElementById('modal-curso').classList.add('open');
 }
 
@@ -1579,7 +1607,8 @@ async function guardarCurso() {
     tipo: document.getElementById('edit-curso-tipo').value,
     responsable: document.getElementById('edit-curso-responsable').value.trim(),
     duracion_horas: parseFloat(document.getElementById('edit-curso-horas').value) || null,
-    temario: document.getElementById('edit-curso-temario').value.trim()
+    temario: document.getElementById('edit-curso-temario').value.trim(),
+    costo: parseFloat(document.getElementById('edit-curso-costo').value) || 0
   }).eq('id', id);
   if (error) { toast('Error al guardar.'); return; }
   cerrarModalCurso();
