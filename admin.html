@@ -123,6 +123,7 @@ tr:hover td { background: #fafeff; }
 .badge-yellow { background: #FEF3C7; color: #92400E; }
 .badge-blue { background: #E8EEF7; color: #1B4F8A; }
 .badge-gray { background: #f0f0f0; color: #666; }
+.badge-red { background: #FDECEC; color: #c0392b; }
 
 /* ── PROGRESS BAR ── */
 .prog { display: flex; align-items: center; gap: 8px; }
@@ -1719,6 +1720,10 @@ async function cargarAvance() {
 
   // 4. Cruzar plan vs realizado
   let realizadas = 0;
+  const hoy = new Date();
+  const mesActualCal = hoy.getMonth() + 1;    // mes calendario actual (1-12)
+  const anioActualCal = hoy.getFullYear();
+
   const filas = plan.map(p => {
     // Sesiones que corresponden a este curso+centro
     const sesDelPlan = (sesiones || []).filter(s =>
@@ -1743,7 +1748,29 @@ async function cargarAvance() {
 
     const totalConvocados = Object.keys(convocadosUnicos).length;
 
-    return { plan: p, dictada, sesiones: sesDelPlan, asistieron: asistieron.size, totalConvocados, ausentes };
+    // ── ESTADO DE DESVÍO ──
+    // Mes planificado y su año calendario dentro del ciclo fiscal
+    const anioPlan = anioDeMes(p.mes, periodo);
+    let estadoDesvio;
+    if (dictada) {
+      // Tomar la primera sesión dictada y comparar su mes con el planificado
+      const primeraSesion = sesDelPlan.sort((a,b) => a.fecha < b.fecha ? -1 : 1)[0];
+      const mesDictado = parseInt(primeraSesion.fecha.slice(5,7));
+      if (mesDictado === p.mes) estadoDesvio = 'En fecha';
+      else {
+        // Comparar cronológicamente dentro del ciclo (jul=inicio)
+        const ordenPlan = (p.mes >= 7 ? p.mes - 7 : p.mes + 5);         // 0..11 desde julio
+        const ordenDictado = (mesDictado >= 7 ? mesDictado - 7 : mesDictado + 5);
+        estadoDesvio = ordenDictado < ordenPlan ? 'Adelantada' : 'Atrasada';
+      }
+    } else {
+      // No dictada: ¿ya pasó su mes o todavía no llegó?
+      // Comparar año+mes planificado contra la fecha actual
+      const yaPaso = (anioPlan < anioActualCal) || (anioPlan === anioActualCal && p.mes < mesActualCal);
+      estadoDesvio = yaPaso ? 'No realizada' : 'Pendiente';
+    }
+
+    return { plan: p, dictada, sesiones: sesDelPlan, asistieron: asistieron.size, totalConvocados, ausentes, estadoDesvio };
   });
 
   const planificadas = plan.length;
@@ -1758,14 +1785,28 @@ async function cargarAvance() {
 
   // Tabla detalle
   const wrap = document.getElementById('avance-wrap');
-  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Asist./convoc.</th><th>Ausentes</th></tr></thead><tbody>';
+  const estiloEstado = {
+    'En fecha':      'badge-green',
+    'Adelantada':    'badge-blue',
+    'Atrasada':      'badge-yellow',
+    'Pendiente':     'badge-gray',
+    'No realizada':  'badge-red'
+  };
+  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
   filas.sort((a,b) => a.plan.mes - b.plan.mes).forEach(f => {
-    const estado = f.dictada
-      ? '<span class="badge badge-green">Dictada</span>'
-      : '<span class="badge badge-yellow">Pendiente</span>';
+    const cls = estiloEstado[f.estadoDesvio] || 'badge-gray';
+    const estado = `<span class="badge ${cls}">${f.estadoDesvio}</span>`;
     const ausentesTxt = f.dictada && f.ausentes.length
       ? `<a href="#" style="color:#c0392b;" onclick="verAusentes('${f.plan.capacitacion_id}','${f.plan.centro}',${periodo});return false;">${f.ausentes.length} ausente(s)</a>`
       : (f.dictada ? '<span style="color:#1A6B3C;">Todos</span>' : '—');
+    // La justificación solo tiene sentido si hubo desvío
+    const necesitaJustif = ['Adelantada','Atrasada','No realizada'].includes(f.estadoDesvio);
+    const just = (f.plan.justificacion || '').replace(/"/g,'&quot;');
+    const justCell = necesitaJustif
+      ? `<input type="text" value="${just}" placeholder="Motivo del desvío..."
+             style="width:100%;min-width:160px;padding:5px 8px;border:1px solid ${just?'#ddd':'#e8c0c0'};border-radius:6px;font-size:12px;"
+             onblur="guardarJustificacion('${f.plan.id}', this.value)">`
+      : '<span style="color:#ccc;font-size:12px;">—</span>';
     html += `<tr>
       <td><span class="badge badge-gray">${f.plan.capacitaciones?.codigo || '—'}</span></td>
       <td style="font-weight:500;">${f.plan.capacitaciones?.titulo || '—'}</td>
@@ -1774,6 +1815,7 @@ async function cargarAvance() {
       <td>${estado}</td>
       <td>${f.dictada ? f.asistieron + '/' + f.totalConvocados : '—'}</td>
       <td>${ausentesTxt}</td>
+      <td>${justCell}</td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -1781,6 +1823,12 @@ async function cargarAvance() {
 
   // Guardar para el detalle de ausentes
   window._avanceFilas = filas;
+}
+
+async function guardarJustificacion(planId, texto) {
+  const { error } = await sb.from('plan_capacitacion').update({ justificacion: texto.trim() }).eq('id', planId);
+  if (error) { toast('Error al guardar la justificación.'); return; }
+  toast('Justificación guardada.');
 }
 
 function verAusentes(capId, centro, periodo) {
