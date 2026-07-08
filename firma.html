@@ -860,20 +860,29 @@ async function generarPDF(firmaInstructor) {
 
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
   for (const a of asiData || []) {
-    if (y > 260) { doc.addPage(); y = 25; }
+    if (y > 258) { doc.addPage(); y = 25; }
     doc.text(a.empleados.legajo, m + 2, y);
-    doc.text(a.empleados.nombre + ' - ' + (a.empleados.sector || '-'), m + 22, y);
+    // Nombre en una línea; sector debajo, más chico y gris, recortado a su columna
+    doc.setFontSize(9); doc.setTextColor(0);
+    const nombre = doc.splitTextToSize(a.empleados.nombre || '', 62)[0];
+    doc.text(nombre, m + 22, y);
+    if (a.empleados.sector) {
+      doc.setFontSize(7); doc.setTextColor(120);
+      const sector = doc.splitTextToSize(a.empleados.sector, 62)[0];
+      doc.text(sector, m + 22, y + 3.5);
+      doc.setFontSize(9); doc.setTextColor(0);
+    }
     try {
       let img = a.firma_url;
       if (!img.startsWith('data:')) {
         const { data: b } = await sb.storage.from('firmas').download(a.firma_url);
         img = await blobToDataURL(b);
       }
-      doc.addImage(img, 'PNG', m + 90, y - 5, 55, 10);
+      doc.addImage(img, 'PNG', m + 92, y - 4, 48, 9);
     } catch (_) {}
     doc.text(new Date(a.firmado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }), m + 153, y);
-    doc.setDrawColor(235); doc.line(m, y + 3, 210 - m, y + 3);
-    y += 12;
+    doc.setDrawColor(235); doc.line(m, y + 6, 210 - m, y + 6);
+    y += 13;
   }
 
   y += 6;
