@@ -418,8 +418,12 @@ tr:hover td { background: #fafeff; }
         <label>Tipo</label>
         <select id="f-tipo">
           <option value="">Todos</option>
-          <option>BPM</option><option>Seguridad</option>
-          <option>Calidad</option><option>Ambiental</option><option>Otro</option>
+          <option>Functional Skills</option>
+          <option>Management, leadership and personal development (soft skills)</option>
+          <option>Languages training</option>
+          <option>Other training</option>
+          <option>Health, safety and environment</option>
+          <option>IT (hardware / Software tools Trainings)</option>
         </select>
       </div>
       <button class="btn btn-primary" onclick="cargarSeguimiento()">Aplicar</button>
@@ -630,8 +634,12 @@ tr:hover td { background: #fafeff; }
           <div class="form-group">
             <label>Tipo</label>
             <select id="c-tipo">
-              <option>BPM</option><option>Seguridad</option><option>Calidad</option>
-              <option>Ambiental</option><option>Otro</option>
+              <option>Functional Skills</option>
+              <option>Management, leadership and personal development (soft skills)</option>
+              <option>Languages training</option>
+              <option>Other training</option>
+              <option>Health, safety and environment</option>
+              <option>IT (hardware / Software tools Trainings)</option>
             </select>
           </div>
           <div class="form-group"><label>Responsable</label><input type="text" id="c-responsable" placeholder="Nombre del responsable"></div>
@@ -761,8 +769,12 @@ tr:hover td { background: #fafeff; }
       <div class="form-group">
         <label>Tipo</label>
         <select id="edit-curso-tipo">
-          <option>BPM</option><option>Seguridad</option><option>Calidad</option>
-          <option>Ambiental</option><option>Otro</option>
+          <option>Functional Skills</option>
+          <option>Management, leadership and personal development (soft skills)</option>
+          <option>Languages training</option>
+          <option>Other training</option>
+          <option>Health, safety and environment</option>
+          <option>IT (hardware / Software tools Trainings)</option>
         </select>
       </div>
       <div class="form-group"><label>Responsable</label><input type="text" id="edit-curso-responsable"></div>
@@ -1587,7 +1599,7 @@ async function editarCurso(id) {
   if (!data) { toast('No se encontró el curso.'); return; }
   document.getElementById('edit-curso-id').value = data.id;
   document.getElementById('edit-curso-titulo').value = data.titulo || '';
-  document.getElementById('edit-curso-tipo').value = data.tipo || 'BPM';
+  document.getElementById('edit-curso-tipo').value = data.tipo || 'Functional Skills';
   document.getElementById('edit-curso-responsable').value = data.responsable || '';
   document.getElementById('edit-curso-horas').value = data.duracion_horas || '';
   document.getElementById('edit-curso-temario').value = data.temario || '';
