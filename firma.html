@@ -297,8 +297,6 @@ body {
       <label>Sector *</label>
       <select id="aa-sector">
         <option value="">Seleccioná tu sector...</option>
-        <option>Envasado</option><option>Producción</option><option>Calidad</option>
-        <option>Logística</option><option>Mantenimiento</option><option>Otro</option>
       </select>
     </div>
     <button class="btn btn-primary" id="btn-autoagregar" onclick="confirmarAutoAgregar()">Agregarme y firmar</button>
@@ -353,7 +351,7 @@ body {
 <!-- ══ PANTALLA: CERRADA ══ -->
 <div id="p-cerrada" style="display:none;">
   <div class="icon">✅</div>
-  <h2>Sesión cerrada</h2>
+  <h2>Capacitación finalizada</h2>
   <p id="cerrada-texto"></p>
   <button class="btn btn-primary" style="max-width:280px;margin:0 auto;" onclick="mostrar('p-inicio')">Volver al inicio</button>
 </div>
@@ -365,15 +363,15 @@ body {
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn-cerrar" onclick="abrirConvocados()">👥 Convocados</button>
-    <button class="btn-cerrar" onclick="abrirModalCierre()">🔒 Cerrar sesión</button>
+    <button class="btn-cerrar" onclick="abrirModalCierre()">🔒 Finalizar capacitación</button>
   </div>
 </div>
 
 <!-- MODAL: CIERRE DE SESIÓN -->
 <div class="overlay" id="modal-cierre">
   <div class="modal">
-    <h3>Cerrar sesión</h3>
-    <p>Ingresá el PIN para cerrar. Una vez cerrada no se pueden agregar firmas.</p>
+    <h3>Finalizar capacitación</h3>
+    <p>Ingresá el PIN para finalizar. Una vez finalizada no se pueden agregar firmas.</p>
 
     <!-- Paso 1: PIN -->
     <div id="cierre-p1">
@@ -513,8 +511,27 @@ async function abrirSesion() {
   convocados = new Set();
   actualizarContador();
 
+  // Poblar el desplegable de sectores del auto-agregado con los sectores reales
+  poblarSectoresAutoAgregar(emps || []);
+
   btn.disabled = false; btn.textContent = 'Abrir sesión y empezar';
   mostrar('p-buscar');
+}
+
+function poblarSectoresAutoAgregar(todosLosEmpleados) {
+  const sel = document.getElementById('aa-sector');
+  if (!sel) return;
+  const sectores = [...new Set(todosLosEmpleados.map(e => e.sector).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Seleccioná tu sector...</option>';
+  sectores.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  });
+  // Opción para casos no listados
+  const otro = document.createElement('option');
+  otro.value = 'Otro'; otro.textContent = 'Otro';
+  sel.appendChild(otro);
 }
 
 function iniciarPad() {
