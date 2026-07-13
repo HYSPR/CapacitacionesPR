@@ -444,6 +444,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let sesion = null;
 let empleados = [];
 let firmados = new Set();
+let yaAsistieronAntes = new Set();
 let convocados = new Set();
 let empSeleccionado = null;
 let pad = null;
@@ -553,6 +554,35 @@ async function abrirSesion() {
   empleados = (emps || []).filter(e => !e.centro || e.centro === centro);
   firmados = new Set();
   convocados = new Set();
+
+  // Si es continuación, procesar las jornadas anteriores
+  yaAsistieronAntes = new Set();
+  if (madreId) {
+    // Todas las sesiones del grupo: la madre + sus continuaciones (menos la actual)
+    const { data: hermanas } = await sb.from('sesiones')
+      .select('id').or(`id.eq.${madreId},sesion_madre_id.eq.${madreId}`);
+    const hermanasIds = (hermanas || []).map(h => h.id).filter(id => id !== sesion.id);
+    if (hermanasIds.length) {
+      // Quiénes ya firmaron en jornadas anteriores → bloqueados
+      const { data: asisPrevias } = await sb.from('asistencias')
+        .select('empleado_id').in('sesion_id', hermanasIds).eq('anulada', false);
+      (asisPrevias || []).forEach(a => yaAsistieronAntes.add(a.empleado_id));
+
+      // Quiénes estaban convocados en jornadas anteriores
+      const { data: convPrevios } = await sb.from('convocados')
+        .select('empleado_id').in('sesion_id', hermanasIds);
+      const convocadosPrevios = new Set((convPrevios || []).map(c => c.empleado_id));
+
+      // Pendientes = convocados antes que NO firmaron → se pre-cargan como convocados de esta jornada
+      const pendientes = [...convocadosPrevios].filter(id => !yaAsistieronAntes.has(id));
+      if (pendientes.length) {
+        const nuevos = pendientes.map(id => ({ sesion_id: sesion.id, empleado_id: id }));
+        await sb.from('convocados').upsert(nuevos, { onConflict: 'sesion_id,empleado_id' });
+        pendientes.forEach(id => convocados.add(id));
+      }
+    }
+  }
+
   actualizarContador();
 
   // Poblar el desplegable de sectores del auto-agregado con los sectores reales
@@ -607,13 +637,16 @@ function renderLista(q) {
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
   lista.innerHTML = arr.map(e => {
     const firmado = firmados.has(e.id);
-    return `<div class="emp-item ${firmado ? 'signed' : ''}" onclick="${firmado ? '' : `seleccionar('${e.id}')`}">
+    const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
+    // Bloqueado si ya firmó en esta sesión o si ya asistió en otra jornada
+    const bloqueado = firmado || asistioAntes;
+    return `<div class="emp-item ${bloqueado ? 'signed' : ''}" onclick="${bloqueado ? '' : `seleccionar('${e.id}')`}">
       <div class="emp-avatar">${iniciales(e.nombre)}</div>
       <div style="flex:1">
         <div class="emp-name">${e.nombre}</div>
-        <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
+        <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ''}</div>
       </div>
-      ${firmado ? '<div class="emp-check">✓</div>' : ''}
+      ${firmado ? '<div class="emp-check">✓</div>' : (asistioAntes ? '<div class="emp-check" title="Ya asistió en otra jornada">✓</div>' : '')}
     </div>`;
   }).join('');
 }
@@ -661,6 +694,10 @@ async function confirmarAutoAgregar() {
 function seleccionar(id) {
   empSeleccionado = empleados.find(e => e.id === id);
   if (!empSeleccionado) return;
+  if (yaAsistieronAntes.has(id)) {
+    toast('Esta persona ya asistió en otra jornada de esta capacitación.');
+    return;
+  }
   document.getElementById('sel-avatar').textContent = iniciales(empSeleccionado.nombre);
   document.getElementById('sel-nombre').textContent = empSeleccionado.nombre;
   document.getElementById('sel-info').textContent = 'DNI ' + empSeleccionado.legajo + ' · ' + (empSeleccionado.sector || '—');
@@ -728,7 +765,7 @@ function renderSectoresChips() {
   const sectores = [...new Set(empleados.map(e => e.sector).filter(Boolean))].sort();
   const cont = document.getElementById('sectores-chips');
   cont.innerHTML = sectores.map(s => {
-    const delSector = empleados.filter(e => e.sector === s);
+    const delSector = empleados.filter(e => e.sector === s && !yaAsistieronAntes.has(e.id));
     const todosConvocados = delSector.length > 0 && delSector.every(e => convocados.has(e.id));
     return `<button class="btn ${todosConvocados ? 'btn-success' : 'btn-outline'}" style="width:auto;padding:6px 12px;font-size:13px;"
       onclick="toggleSector('${s.replace(/'/g,"\\'")}')">${todosConvocados ? '✓ ' : ''}${s} (${delSector.length})</button>`;
@@ -736,7 +773,8 @@ function renderSectoresChips() {
 }
 
 async function toggleSector(sector) {
-  const delSector = empleados.filter(e => e.sector === sector);
+  // Excluir a los que ya asistieron en otra jornada: no se convocan de nuevo
+  const delSector = empleados.filter(e => e.sector === sector && !yaAsistieronAntes.has(e.id));
   const todosConvocados = delSector.length > 0 && delSector.every(e => convocados.has(e.id));
   if (todosConvocados) {
     for (const e of delSector) {
@@ -772,6 +810,18 @@ function renderListaConvocados(q) {
   lista.innerHTML = arr.map(e => {
     const conv = convocados.has(e.id);
     const firmo = firmados.has(e.id);
+    const asistioAntes = yaAsistieronAntes.has(e.id);
+    if (asistioAntes) {
+      // Ya participó en otra jornada: no se puede convocar de nuevo
+      return `<div class="emp-item" style="opacity:0.5;">
+        <div class="emp-avatar">${iniciales(e.nombre)}</div>
+        <div style="flex:1">
+          <div class="emp-name">${e.nombre}</div>
+          <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'} · <span style="color:#1A6B3C;">ya asistió otra jornada</span></div>
+        </div>
+        <div style="font-size:18px;color:#1A6B3C;">✓</div>
+      </div>`;
+    }
     return `<div class="emp-item" onclick="toggleConvocado('${e.id}')" style="${conv ? 'border-color:#1A6B3C;background:#E6F4EC;' : ''}">
       <div class="emp-avatar">${iniciales(e.nombre)}</div>
       <div style="flex:1">
