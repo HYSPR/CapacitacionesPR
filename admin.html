@@ -795,6 +795,28 @@ tr:hover td { background: #fafeff; }
   </div>
 </div>
 
+<!-- MODAL: VINCULAR SESIONES -->
+<div class="overlay" id="modal-vincular">
+  <div class="modal">
+    <h3>Vincular como misma capacitación</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:16px;">
+      Si esta capacitación se dictó en varias jornadas, vinculála con la primera jornada.
+      En los reportes se contará como una sola capacitación (horas sumadas, presentes y ausentes unificados).
+    </p>
+    <input type="hidden" id="vinc-sesion-id">
+    <div class="form-group">
+      <label>Es continuación de:</label>
+      <select id="vinc-madre">
+        <option value="">— Ninguna (es una sesión independiente) —</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+      <button class="btn btn-outline" onclick="cerrarModalVincular()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVinculo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -922,11 +944,55 @@ async function cargarSesiones() {
       <td>${s.lugar || '—'}</td>
       <td style="font-weight:600;">${n}</td>
       <td>${costoPP}</td>
-      <td>${badge}</td>
+      <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}</td>
       <td>${pdf}</td>
-      <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
+        <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
+      </td>
     </tr>`;
   }).join('');
+}
+
+async function abrirVincular(sesionId, capId, centro, madreActual) {
+  document.getElementById('vinc-sesion-id').value = sesionId;
+  const sel = document.getElementById('vinc-madre');
+  sel.innerHTML = '<option value="">— Ninguna (es una sesión independiente) —</option>';
+
+  // Candidatas: sesiones de la misma capacitación y centro, que NO sean esta misma,
+  // y que no sean a su vez continuaciones (para no encadenar).
+  let q = sb.from('sesiones')
+    .select('id, fecha, centro, instructor')
+    .eq('capacitacion_id', capId)
+    .is('sesion_madre_id', null)
+    .neq('id', sesionId)
+    .order('fecha', { ascending: false });
+  if (centro) q = q.eq('centro', centro);
+  const { data } = await q;
+
+  (data || []).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = formatFecha(s.fecha) + ' · ' + s.centro + ' · ' + (s.instructor || '');
+    if (madreActual && s.id === madreActual) o.selected = true;
+    sel.appendChild(o);
+  });
+
+  document.getElementById('modal-vincular').classList.add('open');
+}
+
+function cerrarModalVincular() {
+  document.getElementById('modal-vincular').classList.remove('open');
+}
+
+async function guardarVinculo() {
+  const sesionId = document.getElementById('vinc-sesion-id').value;
+  const madreId = document.getElementById('vinc-madre').value || null;
+  const { error } = await sb.from('sesiones').update({ sesion_madre_id: madreId }).eq('id', sesionId);
+  if (error) { toast('Error al vincular: ' + error.message); return; }
+  cerrarModalVincular();
+  toast(madreId ? 'Sesiones vinculadas.' : 'Vínculo quitado.');
+  cargarSesiones();
 }
 
 async function borrarSesion(id, titulo, nAsistentes) {
@@ -1713,7 +1779,7 @@ async function cargarAvance() {
   const desde = periodo + '-07-01';
   const hasta = (periodo + 1) + '-06-30';
   let qSes = sb.from('sesiones')
-    .select('id, capacitacion_id, centro, fecha')
+    .select('id, capacitacion_id, centro, fecha, sesion_madre_id, capacitaciones(duracion_horas)')
     .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
   const { data: sesiones } = await qSes;
 
@@ -1760,6 +1826,11 @@ async function cargarAvance() {
 
     const totalConvocados = Object.keys(convocadosUnicos).length;
 
+    // Horas totales: suma de la duración de TODAS las jornadas de esta capacitación+centro.
+    // Si se dio en 2 sesiones de 1h, son 2h de capacitación.
+    const horasTotales = sesDelPlan.reduce((acc, s) => acc + (s.capacitaciones?.duracion_horas || 0), 0);
+    const jornadas = sesDelPlan.length;
+
     // ── ESTADO DE DESVÍO ──
     // Mes planificado y su año calendario dentro del ciclo fiscal
     const anioPlan = anioDeMes(p.mes, periodo);
@@ -1782,7 +1853,7 @@ async function cargarAvance() {
       estadoDesvio = yaPaso ? 'No realizada' : 'Pendiente';
     }
 
-    return { plan: p, dictada, sesiones: sesDelPlan, asistieron: asistieron.size, totalConvocados, ausentes, estadoDesvio };
+    return { plan: p, dictada, sesiones: sesDelPlan, asistieron: asistieron.size, totalConvocados, ausentes, estadoDesvio, horasTotales, jornadas };
   });
 
   const planificadas = plan.length;
@@ -1804,7 +1875,7 @@ async function cargarAvance() {
     'Pendiente':     'badge-gray',
     'No realizada':  'badge-red'
   };
-  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Jornadas</th><th>Horas</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
   filas.sort((a,b) => a.plan.mes - b.plan.mes).forEach(f => {
     const cls = estiloEstado[f.estadoDesvio] || 'badge-gray';
     const estado = `<span class="badge ${cls}">${f.estadoDesvio}</span>`;
@@ -1819,12 +1890,18 @@ async function cargarAvance() {
              style="width:100%;min-width:160px;padding:5px 8px;border:1px solid ${just?'#ddd':'#e8c0c0'};border-radius:6px;font-size:12px;"
              onblur="guardarJustificacion('${f.plan.id}', this.value)">`
       : '<span style="color:#ccc;font-size:12px;">—</span>';
+    // Jornadas: si fue en más de una, lo destacamos
+    const jornadasTxt = !f.dictada ? '—'
+      : (f.jornadas > 1 ? `<span class="badge badge-blue">${f.jornadas} jornadas</span>` : '1');
+    const horasTxt = f.dictada ? f.horasTotales.toFixed(1) + ' hs' : '—';
     html += `<tr>
       <td><span class="badge badge-gray">${f.plan.capacitaciones?.codigo || '—'}</span></td>
       <td style="font-weight:500;">${f.plan.capacitaciones?.titulo || '—'}</td>
       <td>${f.plan.centro}</td>
       <td>${MESES[f.plan.mes]}</td>
       <td>${estado}</td>
+      <td>${jornadasTxt}</td>
+      <td>${horasTxt}</td>
       <td>${f.dictada ? f.asistieron + '/' + f.totalConvocados : '—'}</td>
       <td>${ausentesTxt}</td>
       <td>${justCell}</td>
