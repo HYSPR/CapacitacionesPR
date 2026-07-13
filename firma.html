@@ -258,6 +258,21 @@ body {
       <label>Instructor *</label>
       <input type="text" id="inp-instructor" placeholder="Nombre del instructor">
     </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="inp-es-continuacion" onchange="toggleContinuacion()" style="width:auto;">
+        Es continuación de una capacitación ya empezada (otra jornada)
+      </label>
+    </div>
+    <div class="form-group" id="grupo-continuacion" style="display:none;">
+      <label>¿De cuál capacitación es continuación?</label>
+      <select id="inp-sesion-madre">
+        <option value="">Seleccioná la sesión...</option>
+      </select>
+      <p style="font-size:12px;color:#888;margin-top:5px;">
+        Se muestran las capacitaciones dictadas en los últimos 30 días. Al vincularlas, en los reportes se contarán como una sola capacitación en varias jornadas.
+      </p>
+    </div>
     <button class="btn btn-primary" id="btn-abrir" onclick="abrirSesion()">Abrir sesión y empezar</button>
   </div>
 </div>
@@ -371,22 +386,10 @@ body {
 <div class="overlay" id="modal-cierre">
   <div class="modal">
     <h3>Finalizar capacitación</h3>
-    <p>Ingresá el PIN para finalizar. Una vez finalizada no se pueden agregar firmas.</p>
+    <p>Una vez finalizada no se pueden agregar más firmas.</p>
 
-    <!-- Paso 1: PIN -->
-    <div id="cierre-p1">
-      <div class="form-group">
-        <label>PIN</label>
-        <input type="password" id="inp-pin" placeholder="••••" maxlength="6">
-      </div>
-      <div class="btn-row-2">
-        <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
-        <button class="btn btn-danger-outline" onclick="validarPin()">Continuar</button>
-      </div>
-    </div>
-
-    <!-- Paso 2: Verificación de eficacia -->
-    <div id="cierre-verif" style="display:none;">
+    <!-- Paso 1: Verificación de eficacia -->
+    <div id="cierre-verif">
       <div class="form-group">
         <label>Verificación de eficacia *</label>
         <select id="sel-verif">
@@ -411,7 +414,7 @@ body {
       </div>
     </div>
 
-    <!-- Paso 3: Firma del instructor -->
+    <!-- Paso 2: Firma del instructor -->
     <div id="cierre-p2" style="display:none;">
       <p style="margin-bottom:8px;">Firma del instructor</p>
       <div class="sig-container" style="margin-bottom:12px;">
@@ -435,7 +438,6 @@ body {
 <script>
 const SUPABASE_URL = 'https://hxdyobticojtiztkgpri.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4ZHlvYnRpY29qdGl6dGtncHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5OTQ4MTYsImV4cCI6MjA5ODU3MDgxNn0.5__ql02n2WMO_PWZlOHK8hmVVhhwL2K_cLEbNEH0-VQ';
-const PIN = '1234';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -482,6 +484,40 @@ function mostrar(id) {
   }
 }
 
+async function toggleContinuacion() {
+  const grupo = document.getElementById('grupo-continuacion');
+  const activo = document.getElementById('inp-es-continuacion').checked;
+  grupo.style.display = activo ? 'block' : 'none';
+  if (!activo) return;
+
+  const cap = document.getElementById('sel-cap').value;
+  const centro = document.getElementById('inp-centro').value;
+  if (!cap) { toast('Primero elegí la capacitación.'); document.getElementById('inp-es-continuacion').checked = false; grupo.style.display = 'none'; return; }
+
+  // Buscar sesiones de esa capacitación (mismo centro si está elegido) de los últimos 30 días
+  const hace30 = new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
+  let q = sb.from('sesiones')
+    .select('id, fecha, centro, instructor, capacitaciones(titulo)')
+    .eq('capacitacion_id', cap)
+    .gte('fecha', hace30)
+    .is('sesion_madre_id', null)   // solo sesiones madre o normales, no continuaciones
+    .order('fecha', { ascending: false });
+  if (centro) q = q.eq('centro', centro);
+  const { data } = await q;
+
+  const sel = document.getElementById('inp-sesion-madre');
+  sel.innerHTML = '<option value="">Seleccioná la sesión...</option>';
+  (data || []).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = formatFecha(s.fecha) + ' · ' + s.centro + ' · ' + (s.instructor || '');
+    sel.appendChild(o);
+  });
+  if (!data || !data.length) {
+    sel.innerHTML = '<option value="">No hay capacitaciones recientes de este tipo</option>';
+  }
+}
+
 async function abrirSesion() {
   const cap = document.getElementById('sel-cap').value;
   const centro = document.getElementById('inp-centro').value;
@@ -494,8 +530,16 @@ async function abrirSesion() {
   const btn = document.getElementById('btn-abrir');
   btn.disabled = true; btn.textContent = 'Abriendo...';
 
+  // Si es continuación, tomar la sesión madre elegida
+  const esContinuacion = document.getElementById('inp-es-continuacion').checked;
+  const madreId = esContinuacion ? (document.getElementById('inp-sesion-madre').value || null) : null;
+  if (esContinuacion && !madreId) { toast('Elegí de qué capacitación es continuación.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
+
+  const nuevaSesion = { capacitacion_id: cap, centro, fecha, lugar, instructor: inst };
+  if (madreId) nuevaSesion.sesion_madre_id = madreId;
+
   const { data, error } = await sb.from('sesiones')
-    .insert({ capacitacion_id: cap, centro, fecha, lugar, instructor: inst })
+    .insert(nuevaSesion)
     .select('*, capacitaciones(titulo, tipo, duracion_horas, codigo, responsable)')
     .single();
 
@@ -513,6 +557,10 @@ async function abrirSesion() {
 
   // Poblar el desplegable de sectores del auto-agregado con los sectores reales
   poblarSectoresAutoAgregar(emps || []);
+
+  // Resetear la opción de continuación para la próxima
+  document.getElementById('inp-es-continuacion').checked = false;
+  document.getElementById('grupo-continuacion').style.display = 'none';
 
   btn.disabled = false; btn.textContent = 'Abrir sesión y empezar';
   mostrar('p-buscar');
@@ -749,28 +797,20 @@ async function toggleConvocado(id) {
   actualizarContador();
 }
 
-// ── CIERRE DE SESIÓN ──
+// ── FINALIZAR CAPACITACIÓN ──
 function abrirModalCierre() {
   document.getElementById('modal-cierre').classList.add('open');
-  document.getElementById('cierre-p1').style.display = 'block';
-  document.getElementById('cierre-verif').style.display = 'none';
+  document.getElementById('cierre-verif').style.display = 'block';
   document.getElementById('cierre-p2').style.display = 'none';
-  document.getElementById('inp-pin').value = '';
+  document.getElementById('sel-verif').value = '';
+  document.getElementById('inp-verif-otro').value = '';
+  document.getElementById('grupo-verif-otro').style.display = 'none';
+  document.getElementById('btn-verif-otro').style.display = 'block';
   verificacionEficacia = '';
 }
 
 function cerrarModal() {
   document.getElementById('modal-cierre').classList.remove('open');
-}
-
-function validarPin() {
-  if (document.getElementById('inp-pin').value !== PIN) { toast('PIN incorrecto.'); return; }
-  document.getElementById('cierre-p1').style.display = 'none';
-  document.getElementById('cierre-verif').style.display = 'block';
-  document.getElementById('sel-verif').value = '';
-  document.getElementById('inp-verif-otro').value = '';
-  document.getElementById('grupo-verif-otro').style.display = 'none';
-  document.getElementById('btn-verif-otro').style.display = 'block';
 }
 
 function toggleVerifOtro() {
