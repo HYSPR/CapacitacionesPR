@@ -939,7 +939,7 @@ async function cargarSesiones() {
       <td>${formatFecha(s.fecha)}</td>
       <td style="font-weight:500;">${s.capacitaciones?.titulo || '—'}</td>
       <td><span class="badge badge-blue">${s.capacitaciones?.tipo || '—'}</span></td>
-      <td>${s.centro || '—'}</td>
+      <td>${s.centro || (s.modalidad === 'online' ? '<span style="color:#888;">Todas</span>' : '—')}</td>
       <td>${s.instructor || '—'}</td>
       <td>${s.lugar || '—'}</td>
       <td style="font-weight:600;">${n}</td>
