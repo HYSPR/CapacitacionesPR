@@ -1058,47 +1058,60 @@ function limpiarInst() {
 }
 
 async function cerrarSesion() {
-  const firmaInst = padInst && !padInst.isEmpty() ? padInst.toDataURL('image/png') : null;
-  const pdfBytes = await generarPDF(firmaInst);
-  const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const hashHex = await sha256(pdfBytes);
+  const btnGenerar = event && event.target ? event.target : null;
+  if (btnGenerar) { btnGenerar.disabled = true; btnGenerar.textContent = 'Generando acta...'; }
 
-  const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
-  await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
+  try {
+    const firmaInst = padInst && !padInst.isEmpty() ? padInst.toDataURL('image/png') : null;
+    const pdfBytes = await generarPDF(firmaInst);
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const hashHex = await sha256(pdfBytes);
 
-  // Si es online y adjuntaron el registro externo, subirlo al bucket "registros"
-  let registroPath = null;
-  const inputReg = document.getElementById('inp-registro');
-  if (esOnline && inputReg && inputReg.files && inputReg.files.length) {
-    const file = inputReg.files[0];
-    const ext = file.name.split('.').pop();
-    registroPath = sesion.id + '/registro_' + Date.now() + '.' + ext;
-    const { error: regErr } = await sb.storage.from('registros').upload(registroPath, file, { contentType: file.type || 'application/octet-stream' });
-    if (regErr) { toast('No se pudo subir el registro, pero la capacitación se cerró igual.'); registroPath = null; }
+    // 1) DESCARGAR EL ACTA SIEMPRE (aunque falle la nube, el usuario se lleva el PDF)
+    const url = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Acta_' + sesion.capacitaciones.titulo.replace(/\s+/g, '_') + '_' + sesion.fecha + '.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // 2) Subir el acta a la nube
+    const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
+    const { error: pdfErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
+    if (pdfErr) { toast('El acta se descargó, pero no se pudo subir a la nube: ' + pdfErr.message); }
+
+    // 3) Si adjuntaron un registro externo (opcional, solo online), subirlo
+    let registroPath = null;
+    const inputReg = document.getElementById('inp-registro');
+    if (esOnline && inputReg && inputReg.files && inputReg.files.length) {
+      const file = inputReg.files[0];
+      const ext = file.name.split('.').pop();
+      registroPath = sesion.id + '/registro_' + Date.now() + '.' + ext;
+      const { error: regErr } = await sb.storage.from('registros').upload(registroPath, file, { contentType: file.type || 'application/octet-stream' });
+      if (regErr) { toast('El registro externo no se pudo subir, pero el acta sí se guardó.'); registroPath = null; }
+    }
+
+    // 4) Marcar la sesión como cerrada
+    await sb.from('sesiones').update({
+      estado: 'cerrada',
+      firma_instructor: firmaInst,
+      cerrada_at: new Date().toISOString(),
+      pdf_url: pdfErr ? null : pdfPath,
+      pdf_hash: hashHex,
+      verificacion_eficacia: verificacionEficacia,
+      registro_url: registroPath
+    }).eq('id', sesion.id);
+
+    cerrarModal();
+    document.getElementById('footer-bar').style.display = 'none';
+    document.getElementById('app-header').style.display = 'none';
+    const totalAsist = esOnline ? (firmados.size) : firmados.size;
+    document.getElementById('cerrada-texto').textContent = sesion.capacitaciones.titulo + ' · ' + totalAsist + ' asistentes';
+    mostrar('p-cerrada');
+  } catch (err) {
+    toast('Error al finalizar: ' + err.message);
+    if (btnGenerar) { btnGenerar.disabled = false; btnGenerar.textContent = 'Generar PDF ✓'; }
   }
-
-  await sb.from('sesiones').update({
-    estado: 'cerrada',
-    firma_instructor: firmaInst,
-    cerrada_at: new Date().toISOString(),
-    pdf_url: pdfPath,
-    pdf_hash: hashHex,
-    verificacion_eficacia: verificacionEficacia,
-    registro_url: registroPath
-  }).eq('id', sesion.id);
-
-  const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Acta_' + sesion.capacitaciones.titulo.replace(/\s+/g, '_') + '_' + sesion.fecha + '.pdf';
-  a.click();
-  URL.revokeObjectURL(url);
-
-  cerrarModal();
-  document.getElementById('footer-bar').style.display = 'none';
-  document.getElementById('app-header').style.display = 'none';
-  document.getElementById('cerrada-texto').textContent = sesion.capacitaciones.titulo + ' · ' + firmados.size + ' asistentes';
-  mostrar('p-cerrada');
 }
 
 async function generarPDF(firmaInstructor) {
