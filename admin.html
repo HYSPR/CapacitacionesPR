@@ -928,6 +928,9 @@ async function cargarSesiones() {
     const pdf = s.pdf_url
       ? '<a href="#" style="color:#1B4F8A;font-size:12px;" onclick="descargarPDF(\'' + s.pdf_url + '\')">Descargar</a>'
       : '<span style="color:#bbb;font-size:12px;">—</span>';
+    const registro = s.registro_url
+      ? '<br><a href="#" style="color:#1A6B3C;font-size:11px;" onclick="descargarRegistro(\'' + s.registro_url + '\')">📎 Registro externo</a>'
+      : '';
     // Costo por persona = costo total del curso / asistentes
     const costoTotal = s.capacitaciones?.costo;
     let costoPP = '—';
@@ -945,7 +948,7 @@ async function cargarSesiones() {
       <td style="font-weight:600;">${n}</td>
       <td>${costoPP}</td>
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
-      <td>${pdf}</td>
+      <td>${pdf}${registro}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
         <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
@@ -1021,7 +1024,7 @@ async function borrarSesion(id, titulo, nAsistentes) {
 
 // Borra todos los archivos (firmas y PDFs) de una sesión del Storage
 async function borrarArchivosSesion(sesionId) {
-  for (const bucket of ['firmas', 'pdfs']) {
+  for (const bucket of ['firmas', 'pdfs', 'registros']) {
     try {
       const { data: archivos } = await sb.storage.from(bucket).list(sesionId);
       if (archivos && archivos.length) {
@@ -1035,6 +1038,15 @@ async function borrarArchivosSesion(sesionId) {
 async function descargarPDF(path) {
   const { data, error } = await sb.storage.from('pdfs').download(path);
   if (error) { toast('No se pudo descargar el PDF.'); return; }
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url; a.download = path.split('/').pop(); a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function descargarRegistro(path) {
+  const { data, error } = await sb.storage.from('registros').download(path);
+  if (error) { toast('No se pudo descargar el registro.'); return; }
   const url = URL.createObjectURL(data);
   const a = document.createElement('a');
   a.href = url; a.download = path.split('/').pop(); a.click();
