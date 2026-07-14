@@ -950,7 +950,8 @@ function renderListaConvocados(q) {
     arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
   }
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
-  lista.innerHTML = arr.map(e => {
+
+  const renderItem = (e) => {
     const conv = convocados.has(e.id);
     const firmo = firmados.has(e.id);
     const asistioAntes = yaAsistieronAntes.has(e.id);
@@ -973,7 +974,18 @@ function renderListaConvocados(q) {
       </div>
       <div style="font-size:18px;color:${conv ? '#1A6B3C' : '#ccc'};">${conv ? '✓' : '○'}</div>
     </div>`;
-  }).join('');
+  };
+
+  const sep = (texto) => `<div style="font-size:12px;font-weight:600;color:#888;margin:6px 2px 4px;">${texto}</div>`;
+
+  // Convocados arriba (los que ya asistieron en otra jornada quedan aparte, no son convocables)
+  const arriba = arr.filter(e => convocados.has(e.id) && !yaAsistieronAntes.has(e.id));
+  const abajo = arr.filter(e => !convocados.has(e.id) || yaAsistieronAntes.has(e.id));
+
+  let html = '';
+  if (arriba.length) html += sep('Convocados (' + arriba.length + ')') + arriba.map(renderItem).join('');
+  if (abajo.length) html += (arriba.length ? sep('Resto') : '') + abajo.map(renderItem).join('');
+  lista.innerHTML = html;
 }
 
 async function toggleConvocado(id) {
