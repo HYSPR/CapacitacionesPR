@@ -255,6 +255,13 @@ body {
       </div>
     </div>
     <div class="form-group">
+      <label>Modalidad *</label>
+      <select id="inp-modalidad" onchange="actualizarLugarLabel()">
+        <option value="presencial">Presencial (con firma)</option>
+        <option value="online">Online (sin firma)</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Instructor *</label>
       <input type="text" id="inp-instructor" placeholder="Nombre del instructor">
     </div>
@@ -287,6 +294,11 @@ body {
   <div class="emp-list" id="lista-emp"></div>
   <button class="btn btn-outline" style="margin-top:14px;" onclick="abrirAutoAgregar()">
     No estoy en la lista
+  </button>
+  <button class="btn btn-success" id="btn-confirmar-online"
+          style="position:fixed;bottom:70px;left:50%;transform:translateX(-50%);width:auto;padding:12px 28px;box-shadow:0 3px 12px rgba(0,0,0,0.25);display:none;z-index:50;"
+          onclick="confirmarOnline()">
+    Confirmar asistencia (0)
   </button>
 </div>
 
@@ -450,6 +462,8 @@ let empSeleccionado = null;
 let pad = null;
 let padInst = null;
 let verificacionEficacia = '';
+let esOnline = false;
+let presentesOnline = new Set();
 
 window.addEventListener('load', () => {
   document.getElementById('inp-fecha').valueAsDate = new Date();
@@ -482,6 +496,21 @@ function mostrar(id) {
   if (id === 'p-buscar') {
     document.getElementById('inp-buscar').value = '';
     renderLista('');
+    // Botón de confirmar online: visible solo en online y con selección
+    const btnOnline = document.getElementById('btn-confirmar-online');
+    if (btnOnline) {
+      btnOnline.style.display = (esOnline && presentesOnline.size) ? 'flex' : 'none';
+      btnOnline.textContent = 'Confirmar asistencia (' + presentesOnline.size + ')';
+    }
+  } else {
+    const btnOnline = document.getElementById('btn-confirmar-online');
+    if (btnOnline) btnOnline.style.display = 'none';
+  }
+
+  // Al volver al inicio, resetear estado online
+  if (id === 'p-inicio') {
+    esOnline = false;
+    presentesOnline = new Set();
   }
 }
 
@@ -519,12 +548,19 @@ async function toggleContinuacion() {
   }
 }
 
+function actualizarLugarLabel() {
+  const online = document.getElementById('inp-modalidad').value === 'online';
+  const grupoLugar = document.getElementById('inp-lugar').closest('.form-group');
+  if (grupoLugar) grupoLugar.style.display = online ? 'none' : 'block';
+}
+
 async function abrirSesion() {
   const cap = document.getElementById('sel-cap').value;
   const centro = document.getElementById('inp-centro').value;
   const fecha = document.getElementById('inp-fecha').value;
   const lugar = document.getElementById('inp-lugar').value.trim();
   const inst = document.getElementById('inp-instructor').value.trim();
+  const modalidadSel = document.getElementById('inp-modalidad').value;
 
   if (!cap || !centro || !fecha || !inst) { toast('Completá todos los campos obligatorios.'); return; }
 
@@ -536,7 +572,7 @@ async function abrirSesion() {
   const madreId = esContinuacion ? (document.getElementById('inp-sesion-madre').value || null) : null;
   if (esContinuacion && !madreId) { toast('Elegí de qué capacitación es continuación.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
-  const nuevaSesion = { capacitacion_id: cap, centro, fecha, lugar, instructor: inst };
+  const nuevaSesion = { capacitacion_id: cap, centro, fecha, lugar, instructor: inst, modalidad: modalidadSel };
   if (madreId) nuevaSesion.sesion_madre_id = madreId;
 
   const { data, error } = await sb.from('sesiones')
@@ -547,8 +583,9 @@ async function abrirSesion() {
   if (error) { toast('Error al crear la sesión.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
   sesion = data;
+  esOnline = (modalidadSel === 'online');
   document.getElementById('h-titulo').textContent = data.capacitaciones.titulo;
-  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + centro + ' · ' + (lugar || 'Sin lugar') + ' · ' + inst;
+  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + centro + ' · ' + (esOnline ? 'Online' : (lugar || 'Sin lugar')) + ' · ' + inst;
 
   const { data: emps } = await sb.from('empleados').select('*').eq('activo', true).order('nombre');
   empleados = (emps || []).filter(e => !e.centro || e.centro === centro);
@@ -635,6 +672,36 @@ function renderLista(q) {
     arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
   }
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
+
+  if (esOnline) {
+    // Modo online: marcar varios con un toque, sin firma
+    lista.innerHTML = arr.map(e => {
+      const firmado = firmados.has(e.id);
+      const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
+      const bloqueado = firmado || asistioAntes;
+      const marcado = presentesOnline.has(e.id);
+      if (bloqueado) {
+        return `<div class="emp-item signed">
+          <div class="emp-avatar">${iniciales(e.nombre)}</div>
+          <div style="flex:1">
+            <div class="emp-name">${e.nombre}</div>
+            <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ' · <span style="color:#1A6B3C;">ya registrado</span>'}</div>
+          </div>
+          <div class="emp-check">✓</div>
+        </div>`;
+      }
+      return `<div class="emp-item" onclick="toggleOnline('${e.id}')" style="${marcado ? 'border-color:#1A6B3C;background:#E6F4EC;' : ''}">
+        <div class="emp-avatar">${iniciales(e.nombre)}</div>
+        <div style="flex:1">
+          <div class="emp-name">${e.nombre}</div>
+          <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
+        </div>
+        <div style="font-size:20px;color:${marcado ? '#1A6B3C' : '#ccc'};">${marcado ? '☑' : '☐'}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
   lista.innerHTML = arr.map(e => {
     const firmado = firmados.has(e.id);
     const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
@@ -649,6 +716,42 @@ function renderLista(q) {
       ${firmado ? '<div class="emp-check">✓</div>' : (asistioAntes ? '<div class="emp-check" title="Ya asistió en otra jornada">✓</div>' : '')}
     </div>`;
   }).join('');
+}
+
+function toggleOnline(id) {
+  if (presentesOnline.has(id)) presentesOnline.delete(id);
+  else presentesOnline.add(id);
+  renderLista(document.getElementById('inp-buscar').value.trim());
+  // Actualizar el botón de confirmar
+  const btn = document.getElementById('btn-confirmar-online');
+  if (btn) {
+    btn.textContent = 'Confirmar asistencia (' + presentesOnline.size + ')';
+    btn.style.display = presentesOnline.size ? 'flex' : 'none';
+  }
+}
+
+async function confirmarOnline() {
+  if (!presentesOnline.size) { toast('Marcá al menos una persona.'); return; }
+  const btn = document.getElementById('btn-confirmar-online');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const registros = [...presentesOnline].map(empId => ({
+    sesion_id: sesion.id, empleado_id: empId, firma_url: 'ONLINE'
+  }));
+  const { error } = await sb.from('asistencias').insert(registros);
+  if (error) { toast('Error al guardar: ' + error.message); btn.disabled = false; return; }
+
+  // También asegurar que queden como convocados
+  const conv = [...presentesOnline].map(empId => ({ sesion_id: sesion.id, empleado_id: empId }));
+  await sb.from('convocados').upsert(conv, { onConflict: 'sesion_id,empleado_id' });
+
+  presentesOnline.forEach(id => { firmados.add(id); convocados.add(id); });
+  presentesOnline.clear();
+  actualizarContador();
+  btn.disabled = false;
+  btn.style.display = 'none';
+  toast('Asistencia registrada.');
+  renderLista(document.getElementById('inp-buscar').value.trim());
 }
 
 function abrirAutoAgregar() {
@@ -687,6 +790,17 @@ async function confirmarAutoAgregar() {
   empleados.push(data);
   actualizarContador();
   btn.disabled = false; btn.textContent = 'Agregarme y firmar';
+
+  if (esOnline) {
+    // En online: sumar a la selección y volver a la lista
+    presentesOnline.add(data.id);
+    toast('Agregado y marcado como presente.');
+    mostrar('p-buscar');
+    const b = document.getElementById('btn-confirmar-online');
+    if (b) { b.textContent = 'Confirmar asistencia (' + presentesOnline.size + ')'; b.style.display = 'flex'; }
+    return;
+  }
+
   toast('Agregado. Ahora firmá.');
   seleccionar(data.id);
 }
@@ -874,6 +988,13 @@ function confirmarVerif() {
   const otro = document.getElementById('inp-verif-otro').value.trim();
   if (!sel && !otro) { toast('Indicá cómo se verificará la eficacia.'); return; }
   verificacionEficacia = sel && otro ? sel + ' — ' + otro : (sel || otro);
+
+  if (esOnline) {
+    // Online: no se pide firma del instructor, se cierra directo
+    cerrarSesion();
+    return;
+  }
+
   document.getElementById('cierre-verif').style.display = 'none';
   document.getElementById('cierre-p2').style.display = 'block';
   const canvas = document.getElementById('sigInstructor');
@@ -981,11 +1102,17 @@ async function generarPDF(firmaInstructor) {
     }
     try {
       let img = a.firma_url;
-      if (!img.startsWith('data:')) {
-        const { data: b } = await sb.storage.from('firmas').download(a.firma_url);
-        img = await blobToDataURL(b);
+      if (img === 'ONLINE') {
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text('Asistencia online', m + 92, y);
+        doc.setFontSize(9); doc.setTextColor(0);
+      } else {
+        if (!img.startsWith('data:')) {
+          const { data: b } = await sb.storage.from('firmas').download(a.firma_url);
+          img = await blobToDataURL(b);
+        }
+        doc.addImage(img, 'PNG', m + 92, y - 4, 48, 9);
       }
-      doc.addImage(img, 'PNG', m + 92, y - 4, 48, 9);
     } catch (_) {}
     doc.text(new Date(a.firmado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }), m + 153, y);
     doc.setDrawColor(235); doc.line(m, y + 6, 210 - m, y + 6);
@@ -993,11 +1120,16 @@ async function generarPDF(firmaInstructor) {
   }
 
   y += 6;
-  if (firmaInstructor) {
-    try { doc.addImage(firmaInstructor, 'PNG', m, y - 14, 55, 18); } catch (_) {}
+  if (esOnline) {
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text('Capacitación online — registro sin firma manuscrita', m, y + 5);
+  } else {
+    if (firmaInstructor) {
+      try { doc.addImage(firmaInstructor, 'PNG', m, y - 14, 55, 18); } catch (_) {}
+    }
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text('Firma del instructor', m, y + 5);
   }
-  doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('Firma del instructor', m, y + 5);
   const hash = await sha256(doc.output('arraybuffer'));
   doc.text('Cerrado: ' + new Date().toLocaleString('es-AR'), 210 - m, y + 5, { align: 'right' });
   doc.text('SHA-256: ' + hash.slice(0, 8) + '...' + hash.slice(-4), 210 - m, y + 10, { align: 'right' });
