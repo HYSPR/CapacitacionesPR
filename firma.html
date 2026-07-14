@@ -420,6 +420,11 @@ body {
         <label>Otra forma / detalle</label>
         <input type="text" id="inp-verif-otro" placeholder="Describí cómo se verificará la eficacia">
       </div>
+      <div class="form-group" id="grupo-registro-online" style="display:none;">
+        <label>Registro de asistencia externo (opcional)</label>
+        <p style="font-size:12px;color:#888;margin:0 0 6px;">Adjuntá el registro de asistencia descargado de la plataforma (Excel, PDF o imagen).</p>
+        <input type="file" id="inp-registro" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg" style="font-size:13px;width:100%;">
+      </div>
       <div class="btn-row-2">
         <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="confirmarVerif()">Continuar →</button>
@@ -680,9 +685,19 @@ function renderLista(q) {
   }
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
 
+  // "Activo" = ya cuenta como asistencia (marcado en online / firmado en presencial).
+  // Los activos suben al tope para verlos juntos.
+  const estaActivo = (e) => esOnline
+    ? (presentesOnline.has(e.id) || firmados.has(e.id) || yaAsistieronAntes.has(e.id))
+    : (firmados.has(e.id) || yaAsistieronAntes.has(e.id));
+
+  const arriba = arr.filter(estaActivo);
+  const abajo = arr.filter(e => !estaActivo(e));
+
+  const sep = (texto) => `<div style="font-size:12px;font-weight:600;color:#888;margin:6px 2px 4px;">${texto}</div>`;
+
   if (esOnline) {
-    // Modo online: marcar varios con un toque, sin firma
-    lista.innerHTML = arr.map(e => {
+    const renderItem = (e) => {
       const firmado = firmados.has(e.id);
       const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
       const bloqueado = firmado || asistioAntes;
@@ -705,14 +720,17 @@ function renderLista(q) {
         </div>
         <div style="font-size:20px;color:${marcado ? '#1A6B3C' : '#ccc'};">${marcado ? '☑' : '☐'}</div>
       </div>`;
-    }).join('');
+    };
+    let html = '';
+    if (arriba.length) html += sep('Seleccionados (' + arriba.length + ')') + arriba.map(renderItem).join('');
+    if (abajo.length) html += (arriba.length ? sep('Resto') : '') + abajo.map(renderItem).join('');
+    lista.innerHTML = html;
     return;
   }
 
-  lista.innerHTML = arr.map(e => {
+  const renderItem = (e) => {
     const firmado = firmados.has(e.id);
     const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
-    // Bloqueado si ya firmó en esta sesión o si ya asistió en otra jornada
     const bloqueado = firmado || asistioAntes;
     return `<div class="emp-item ${bloqueado ? 'signed' : ''}" onclick="${bloqueado ? '' : `seleccionar('${e.id}')`}">
       <div class="emp-avatar">${iniciales(e.nombre)}</div>
@@ -722,7 +740,11 @@ function renderLista(q) {
       </div>
       ${firmado ? '<div class="emp-check">✓</div>' : (asistioAntes ? '<div class="emp-check" title="Ya asistió en otra jornada">✓</div>' : '')}
     </div>`;
-  }).join('');
+  };
+  let html = '';
+  if (arriba.length) html += sep('Ya firmaron (' + arriba.length + ')') + arriba.map(renderItem).join('');
+  if (abajo.length) html += (arriba.length ? sep('Pendientes') : '') + abajo.map(renderItem).join('');
+  lista.innerHTML = html;
 }
 
 function toggleOnline(id) {
@@ -977,6 +999,12 @@ function abrirModalCierre() {
   document.getElementById('inp-verif-otro').value = '';
   document.getElementById('grupo-verif-otro').style.display = 'none';
   document.getElementById('btn-verif-otro').style.display = 'block';
+  // El adjunto de registro externo solo aplica en online
+  const grupoReg = document.getElementById('grupo-registro-online');
+  if (grupoReg) {
+    grupoReg.style.display = esOnline ? 'block' : 'none';
+    document.getElementById('inp-registro').value = '';
+  }
   verificacionEficacia = '';
 }
 
@@ -1026,13 +1054,25 @@ async function cerrarSesion() {
   const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
   await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
 
+  // Si es online y adjuntaron el registro externo, subirlo al bucket "registros"
+  let registroPath = null;
+  const inputReg = document.getElementById('inp-registro');
+  if (esOnline && inputReg && inputReg.files && inputReg.files.length) {
+    const file = inputReg.files[0];
+    const ext = file.name.split('.').pop();
+    registroPath = sesion.id + '/registro_' + Date.now() + '.' + ext;
+    const { error: regErr } = await sb.storage.from('registros').upload(registroPath, file, { contentType: file.type || 'application/octet-stream' });
+    if (regErr) { toast('No se pudo subir el registro, pero la capacitación se cerró igual.'); registroPath = null; }
+  }
+
   await sb.from('sesiones').update({
     estado: 'cerrada',
     firma_instructor: firmaInst,
     cerrada_at: new Date().toISOString(),
     pdf_url: pdfPath,
     pdf_hash: hashHex,
-    verificacion_eficacia: verificacionEficacia
+    verificacion_eficacia: verificacionEficacia,
+    registro_url: registroPath
   }).eq('id', sesion.id);
 
   const url = URL.createObjectURL(pdfBlob);
