@@ -552,6 +552,9 @@ function actualizarLugarLabel() {
   const online = document.getElementById('inp-modalidad').value === 'online';
   const grupoLugar = document.getElementById('inp-lugar').closest('.form-group');
   if (grupoLugar) grupoLugar.style.display = online ? 'none' : 'block';
+  // El centro no aplica en online (participa gente de varias plantas)
+  const grupoCentro = document.getElementById('inp-centro').closest('.form-group');
+  if (grupoCentro) grupoCentro.style.display = online ? 'none' : 'block';
 }
 
 async function abrirSesion() {
@@ -561,8 +564,10 @@ async function abrirSesion() {
   const lugar = document.getElementById('inp-lugar').value.trim();
   const inst = document.getElementById('inp-instructor').value.trim();
   const modalidadSel = document.getElementById('inp-modalidad').value;
+  const online = (modalidadSel === 'online');
 
-  if (!cap || !centro || !fecha || !inst) { toast('Completá todos los campos obligatorios.'); return; }
+  // En online no se exige centro (puede participar gente de varias plantas)
+  if (!cap || !fecha || !inst || (!online && !centro)) { toast('Completá todos los campos obligatorios.'); return; }
 
   const btn = document.getElementById('btn-abrir');
   btn.disabled = true; btn.textContent = 'Abriendo...';
@@ -572,7 +577,8 @@ async function abrirSesion() {
   const madreId = esContinuacion ? (document.getElementById('inp-sesion-madre').value || null) : null;
   if (esContinuacion && !madreId) { toast('Elegí de qué capacitación es continuación.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
-  const nuevaSesion = { capacitacion_id: cap, centro, fecha, lugar, instructor: inst, modalidad: modalidadSel };
+  // En online el centro queda vacío (multi-centro); cada empleado conserva el suyo
+  const nuevaSesion = { capacitacion_id: cap, centro: online ? null : centro, fecha, lugar: online ? null : lugar, instructor: inst, modalidad: modalidadSel };
   if (madreId) nuevaSesion.sesion_madre_id = madreId;
 
   const { data, error } = await sb.from('sesiones')
@@ -583,12 +589,13 @@ async function abrirSesion() {
   if (error) { toast('Error al crear la sesión.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
   sesion = data;
-  esOnline = (modalidadSel === 'online');
+  esOnline = online;
   document.getElementById('h-titulo').textContent = data.capacitaciones.titulo;
-  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + centro + ' · ' + (esOnline ? 'Online' : (lugar || 'Sin lugar')) + ' · ' + inst;
+  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro + ' · ' + (lugar || 'Sin lugar')) + ' · ' + inst;
 
   const { data: emps } = await sb.from('empleados').select('*').eq('activo', true).order('nombre');
-  empleados = (emps || []).filter(e => !e.centro || e.centro === centro);
+  // Online: todos los empleados de todas las plantas. Presencial: solo los del centro.
+  empleados = esOnline ? (emps || []) : (emps || []).filter(e => !e.centro || e.centro === centro);
   firmados = new Set();
   convocados = new Set();
 
@@ -685,7 +692,7 @@ function renderLista(q) {
           <div class="emp-avatar">${iniciales(e.nombre)}</div>
           <div style="flex:1">
             <div class="emp-name">${e.nombre}</div>
-            <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ' · <span style="color:#1A6B3C;">ya registrado</span>'}</div>
+            <div class="emp-info">DNI ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ' · <span style="color:#1A6B3C;">ya registrado</span>'}</div>
           </div>
           <div class="emp-check">✓</div>
         </div>`;
@@ -694,7 +701,7 @@ function renderLista(q) {
         <div class="emp-avatar">${iniciales(e.nombre)}</div>
         <div style="flex:1">
           <div class="emp-name">${e.nombre}</div>
-          <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
+          <div class="emp-info">DNI ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
         </div>
         <div style="font-size:20px;color:${marcado ? '#1A6B3C' : '#ccc'};">${marcado ? '☑' : '☐'}</div>
       </div>`;
