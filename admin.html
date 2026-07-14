@@ -511,7 +511,7 @@ tr:hover td { background: #fafeff; }
         </div>
         <div class="table-wrap">
           <table id="tbl-faltantes">
-            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Turno</th></tr></thead>
+            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Contrato</th></tr></thead>
             <tbody><tr class="empty-row"><td colspan="4">Seleccioná un curso.</td></tr></tbody>
           </table>
         </div>
@@ -1187,21 +1187,38 @@ async function cargarFaltantes() {
     .eq('capacitacion_id', cursoId).eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
   const sesIds = (ses || []).map(s => s.id);
 
-  let asistieronIds = new Set();
-  if (sesIds.length) {
-    const { data } = await sb.from('asistencias').select('empleado_id').in('sesion_id', sesIds).eq('anulada', false);
-    asistieronIds = new Set((data || []).map(a => a.empleado_id));
+  if (!sesIds.length) {
+    document.querySelector('#tbl-faltantes tbody').innerHTML =
+      '<tr><td colspan="4" style="text-align:center;padding:20px;color:#888;">No hay sesiones dictadas de este curso en el período.</td></tr>';
+    return;
   }
 
-  const sector = document.getElementById('f-sector').value;
-  let q = sb.from('empleados').select('*').eq('activo', true).order('nombre');
-  if (sector) q = q.eq('sector', sector);
-  const { data: todos } = await q;
+  // Quiénes asistieron (firmaron)
+  const { data: asis } = await sb.from('asistencias').select('empleado_id').in('sesion_id', sesIds).eq('anulada', false);
+  const asistieronIds = new Set((asis || []).map(a => a.empleado_id));
 
-  const ausentes = (todos || []).filter(e => !asistieronIds.has(e.id));
+  // Quiénes fueron CONVOCADOS (el universo esperado, no toda la nómina)
+  const { data: conv } = await sb.from('convocados')
+    .select('empleado_id, empleados(id, legajo, nombre, sector, contrato, activo)')
+    .in('sesion_id', sesIds);
+
+  // Ausentes = convocados que no firmaron (únicos, solo activos)
+  const ausentesMap = {};
+  (conv || []).forEach(c => {
+    if (!c.empleados || !c.empleados.activo) return;
+    if (asistieronIds.has(c.empleado_id)) return;
+    ausentesMap[c.empleado_id] = c.empleados;
+  });
+
+  // Filtro opcional por sector
+  const sector = document.getElementById('f-sector').value;
+  let ausentes = Object.values(ausentesMap);
+  if (sector) ausentes = ausentes.filter(e => e.sector === sector);
+  ausentes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
   const tbody = document.querySelector('#tbl-faltantes tbody');
   if (!ausentes.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Todos asistieron en el período.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Todos los convocados asistieron.</td></tr>';
     return;
   }
   tbody.innerHTML = ausentes.map(e => `<tr>
