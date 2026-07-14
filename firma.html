@@ -236,6 +236,13 @@ body {
       </select>
     </div>
     <div class="form-group">
+      <label>Modalidad *</label>
+      <select id="inp-modalidad" onchange="actualizarLugarLabel()">
+        <option value="presencial">Presencial (con firma)</option>
+        <option value="online">Online (sin firma)</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Centro productivo *</label>
       <select id="inp-centro">
         <option value="">Seleccioná el centro...</option>
@@ -253,13 +260,6 @@ body {
         <label>Lugar</label>
         <input type="text" id="inp-lugar" placeholder="Ej: Sala 2">
       </div>
-    </div>
-    <div class="form-group">
-      <label>Modalidad *</label>
-      <select id="inp-modalidad" onchange="actualizarLugarLabel()">
-        <option value="presencial">Presencial (con firma)</option>
-        <option value="online">Online (sin firma)</option>
-      </select>
     </div>
     <div class="form-group">
       <label>Instructor *</label>
