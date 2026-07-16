@@ -432,39 +432,12 @@ tr:hover td { background: #fafeff; }
 
     <!-- Sub-tabs seguimiento -->
     <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #e5e5e5;">
-      <div class="nav-tab active" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-personas', this)">Por persona</div>
-      <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-cursos', this)">Por curso</div>
-      <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-matriz', this)">Matriz</div>
+      <div class="nav-tab active" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-cursos', this)">Por curso</div>
       <div class="nav-tab" style="padding:8px 14px;font-size:12px;" onclick="subtab('st-faltantes', this)">Faltantes</div>
     </div>
 
-    <!-- Por persona -->
-    <div class="tab-content active" id="st-personas">
-      <div class="card">
-        <div class="card-header">
-          <h2>Capacitaciones por persona</h2>
-          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-personas', this.value, [0,1])">
-        </div>
-        <div class="table-wrap">
-          <table id="tbl-personas">
-            <thead>
-              <tr>
-                <th onclick="sort('tbl-personas',0)">Legajo ↕</th>
-                <th onclick="sort('tbl-personas',1)">Nombre ↕</th>
-                <th>Sector</th>
-                <th onclick="sort('tbl-personas',3)">Capacitaciones ↕</th>
-                <th onclick="sort('tbl-personas',4)">Horas ↕</th>
-                <th>Última</th>
-              </tr>
-            </thead>
-            <tbody><tr class="empty-row"><td colspan="6">Aplicá un filtro para ver datos.</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- Por curso -->
-    <div class="tab-content" id="st-cursos">
+    <div class="tab-content active" id="st-cursos">
       <div class="card">
         <div class="card-header"><h2>Asistencia por curso</h2></div>
         <div class="table-wrap">
@@ -475,24 +448,12 @@ tr:hover td { background: #fafeff; }
                 <th>Tipo</th>
                 <th onclick="sort('tbl-cursos-seg',2)">Sesiones ↕</th>
                 <th onclick="sort('tbl-cursos-seg',3)">Asistentes ↕</th>
+                <th onclick="sort('tbl-cursos-seg',4)">Faltantes ↕</th>
                 <th>Por sector</th>
               </tr>
             </thead>
-            <tbody><tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr></tbody>
+            <tbody><tr class="empty-row"><td colspan="6">Aplicá un filtro para ver datos.</td></tr></tbody>
           </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- Matriz -->
-    <div class="tab-content" id="st-matriz">
-      <div class="card">
-        <div class="card-header">
-          <h2>Matriz persona × curso</h2>
-          <span style="font-size:12px;color:#aaa;">✓ realizó · — no realizó</span>
-        </div>
-        <div class="table-wrap" id="matriz-wrap">
-          <div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">Aplicá un filtro para ver datos.</div>
         </div>
       </div>
     </div>
@@ -1068,11 +1029,16 @@ async function cargarSeguimiento() {
   const sesIds = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo).map(s => s.id);
 
   let asistencias = [];
+  let convocados = [];
   if (sesIds.length) {
     const { data } = await sb.from('asistencias')
       .select('*, empleados(id, legajo, nombre, sector, contrato, genero, convenio)')
       .in('sesion_id', sesIds).eq('anulada', false);
     asistencias = data || [];
+    const { data: conv } = await sb.from('convocados')
+      .select('sesion_id, empleado_id, empleados(id, sector, activo)')
+      .in('sesion_id', sesIds);
+    convocados = conv || [];
   }
 
   let qEmp = sb.from('empleados').select('*').eq('activo', true).order('nombre');
@@ -1080,52 +1046,21 @@ async function cargarSeguimiento() {
   const { data: empleados } = await qEmp;
 
   const sesFiltradas = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo);
-  datosGlobales = { sesiones: sesFiltradas, asistencias, empleados: empleados || [] };
+  datosGlobales = { sesiones: sesFiltradas, asistencias, convocados, empleados: empleados || [] };
 
-  renderPorPersona();
   renderPorCurso();
-  renderMatriz();
-}
-
-function renderPorPersona() {
-  const { sesiones, asistencias, empleados } = datosGlobales;
-  const rows = empleados.map(emp => {
-    const asiEmp = asistencias.filter(a => a.empleado_id === emp.id);
-    const sesU = [...new Set(asiEmp.map(a => a.sesion_id))];
-    const horas = sesU.reduce((acc, sid) => {
-      const s = sesiones.find(x => x.id === sid);
-      return acc + (s?.capacitaciones?.duracion_horas || 0);
-    }, 0);
-    const ultima = asiEmp.sort((a,b) => b.firmado_at > a.firmado_at ? 1 : -1)[0];
-    return { emp, count: sesU.length, horas, ultima: ultima ? formatFecha(ultima.firmado_at.slice(0,10)) : '—' };
-  });
-
-  const tbody = document.querySelector('#tbl-personas tbody');
-  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin datos.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r => `<tr>
-    <td>${r.emp.legajo}</td>
-    <td style="font-weight:500;">${r.emp.nombre}</td>
-    <td>${r.emp.sector || '—'}</td>
-    <td>
-      <div class="prog">
-        <div class="prog-bar"><div class="prog-fill ${r.count > 3 ? 'green' : r.count === 0 ? 'red' : ''}" style="width:${Math.min(r.count*20,100)}%"></div></div>
-        <span style="font-weight:600;min-width:14px;">${r.count}</span>
-      </div>
-    </td>
-    <td>${r.horas.toFixed(1)} hs</td>
-    <td style="color:#aaa;">${r.ultima}</td>
-  </tr>`).join('');
 }
 
 function renderPorCurso() {
-  const { sesiones, asistencias } = datosGlobales;
+  const { sesiones, asistencias, convocados } = datosGlobales;
   const map = {};
   sesiones.forEach(s => {
     const cid = s.capacitaciones?.id;
     if (!cid) return;
-    if (!map[cid]) map[cid] = { titulo: s.capacitaciones.titulo, tipo: s.capacitaciones.tipo, sesIds: new Set(), empIds: new Set(), sectores: {} };
+    if (!map[cid]) map[cid] = { titulo: s.capacitaciones.titulo, tipo: s.capacitaciones.tipo, sesIds: new Set(), empIds: new Set(), convIds: new Set(), sectores: {} };
     map[cid].sesIds.add(s.id);
   });
+  // Asistentes (los que firmaron / se marcaron presentes)
   asistencias.forEach(a => {
     const s = sesiones.find(x => x.id === a.sesion_id);
     const cid = s?.capacitaciones?.id;
@@ -1134,47 +1069,37 @@ function renderPorCurso() {
     const sec = a.empleados?.sector || 'Sin sector';
     map[cid].sectores[sec] = (map[cid].sectores[sec] || 0) + 1;
   });
+  // Convocados (el universo esperado) — para calcular faltantes
+  (convocados || []).forEach(c => {
+    const s = sesiones.find(x => x.id === c.sesion_id);
+    const cid = s?.capacitaciones?.id;
+    if (!cid || !map[cid]) return;
+    if (c.empleados && c.empleados.activo === false) return;
+    map[cid].convIds.add(c.empleado_id);
+  });
+
   const rows = Object.values(map).sort((a,b) => b.empIds.size - a.empIds.size);
   const tbody = document.querySelector('#tbl-cursos-seg tbody');
-  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin datos.</td></tr>'; return; }
+  if (!rows.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin datos.</td></tr>'; return; }
   tbody.innerHTML = rows.map(r => {
     const secs = Object.entries(r.sectores).sort((a,b) => b[1]-a[1]).slice(0,3)
       .map(([s,n]) => `<span class="badge badge-green" style="margin:1px;">${s}: ${n}</span>`).join(' ');
+    // Faltantes = convocados que no asistieron
+    const faltantes = [...r.convIds].filter(id => !r.empIds.has(id)).length;
+    const faltTxt = r.convIds.size === 0
+      ? '<span style="color:#bbb;" title="No se convocó a nadie en estas sesiones">—</span>'
+      : (faltantes > 0
+          ? '<span style="font-weight:600;color:#c0392b;">' + faltantes + '</span>'
+          : '<span style="color:#1A6B3C;font-weight:600;">0</span>');
     return `<tr>
       <td style="font-weight:500;">${r.titulo}</td>
       <td><span class="badge badge-blue">${r.tipo || '—'}</span></td>
       <td>${r.sesIds.size}</td>
       <td style="font-weight:600;">${r.empIds.size}</td>
+      <td>${faltTxt}</td>
       <td>${secs || '—'}</td>
     </tr>`;
   }).join('');
-}
-
-function renderMatriz() {
-  const { sesiones, asistencias, empleados } = datosGlobales;
-  const capsMap = {};
-  sesiones.forEach(s => { if (s.capacitaciones?.id) capsMap[s.capacitaciones.id] = s.capacitaciones.titulo; });
-  const caps = Object.entries(capsMap);
-  const asiSet = {};
-  asistencias.forEach(a => {
-    const s = sesiones.find(x => x.id === a.sesion_id);
-    if (s?.capacitaciones?.id) asiSet[a.empleado_id + '_' + s.capacitaciones.id] = true;
-  });
-  const wrap = document.getElementById('matriz-wrap');
-  if (!caps.length || !empleados.length) { wrap.innerHTML = '<div style="text-align:center;padding:30px;color:#bbb;font-size:13px;">Sin datos.</div>'; return; }
-
-  let html = '<table class="matriz-table"><thead><tr><th>Persona</th>';
-  caps.forEach(([,t]) => { html += `<th title="${t}" style="max-width:70px;font-size:10px;">${t.length > 14 ? t.slice(0,14)+'…' : t}</th>`; });
-  html += '</tr></thead><tbody>';
-  empleados.forEach(emp => {
-    const total = caps.filter(([cid]) => asiSet[emp.id+'_'+cid]).length;
-    const pct = caps.length ? Math.round(total/caps.length*100) : 0;
-    html += `<tr><td><div style="font-weight:500;">${emp.nombre}</div><div style="font-size:10px;color:#aaa;">${emp.sector||'—'} · ${pct}%</div></td>`;
-    caps.forEach(([cid]) => { html += `<td><span class="${asiSet[emp.id+'_'+cid] ? 'check-si' : 'check-no'}">${asiSet[emp.id+'_'+cid] ? '✓' : '—'}</span></td>`; });
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
 }
 
 async function cargarFaltantes() {
