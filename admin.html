@@ -124,6 +124,9 @@ tr:hover td { background: #fafeff; }
 .badge-blue { background: #E8EEF7; color: #1B4F8A; }
 .badge-gray { background: #f0f0f0; color: #666; }
 .badge-red { background: #FDECEC; color: #c0392b; }
+/* Modo consulta: ocultar formularios de alta y botones de acción */
+body.solo-consulta .accion-editor { display: none !important; }
+#usuario-header { font-size: 12px; color: rgba(255,255,255,0.85); }
 
 /* ── PROGRESS BAR ── */
 .prog { display: flex; align-items: center; gap: 8px; }
@@ -200,9 +203,33 @@ tr:hover td { background: #fafeff; }
 </head>
 <body>
 
+<!-- ══ PANTALLA DE ACCESO ══ -->
+<div id="login-gate" style="position:fixed;inset:0;background:#1B4F8A;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:12px;padding:32px;width:100%;max-width:360px;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+    <div style="font-size:36px;text-align:center;margin-bottom:12px;">🔒</div>
+    <h2 style="font-size:18px;font-weight:700;text-align:center;margin-bottom:6px;">Administración · Capacitaciones</h2>
+    <p style="font-size:13px;color:#666;text-align:center;margin-bottom:20px;">Ingresá con tu usuario</p>
+    <input type="text" id="gate-user" placeholder="Usuario" autocomplete="username"
+           style="width:100%;padding:11px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;"
+           onkeydown="if(event.key==='Enter') document.getElementById('gate-pass').focus()">
+    <input type="password" id="gate-pass" placeholder="Contraseña" autocomplete="current-password"
+           style="width:100%;padding:11px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:12px;"
+           onkeydown="if(event.key==='Enter') validarAcceso()">
+    <button onclick="validarAcceso()" id="gate-btn"
+            style="width:100%;padding:11px;background:#1B4F8A;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">
+      Ingresar
+    </button>
+    <div id="gate-error" style="color:#c0392b;font-size:13px;text-align:center;margin-top:10px;display:none;">Usuario o contraseña incorrectos</div>
+  </div>
+</div>
+
 <div class="header">
   <h1>⚙ Administración · Capacitaciones</h1>
-  <a href="firma.html">← Volver a registro</a>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span id="usuario-header"></span>
+    <a href="#" onclick="cerrarSesionAdmin();return false;" style="color:rgba(255,255,255,0.85);font-size:12px;">Salir</a>
+    <a href="firma.html">← Volver a registro</a>
+  </div>
 </div>
 
 <div class="nav">
@@ -213,6 +240,7 @@ tr:hover td { background: #fafeff; }
   <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
   <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
   <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
+  <div class="nav-tab accion-editor" onclick="tab('t-auditoria', this)">Registro</div>
 </div>
 
 <div class="container">
@@ -678,6 +706,22 @@ tr:hover td { background: #fafeff; }
     </div>
   </div>
 
+  <!-- ══ TAB: AUDITORÍA ══ -->
+  <div class="tab-content" id="t-auditoria">
+    <div class="card">
+      <div class="card-header">
+        <h2>Registro de acciones</h2>
+        <button class="btn btn-outline btn-sm" onclick="cargarAuditoria()">Actualizar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Acción</th><th>Sobre</th><th>Detalle</th></tr></thead>
+          <tbody id="body-auditoria"><tr class="empty-row"><td colspan="5">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- MODAL: EDITAR EMPLEADO -->
@@ -785,6 +829,102 @@ tr:hover td { background: #fafeff; }
 const SUPABASE_URL = 'https://hxdyobticojtiztkgpri.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4ZHlvYnRpY29qdGl6dGtncHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5OTQ4MTYsImV4cCI6MjA5ODU3MDgxNn0.5__ql02n2WMO_PWZlOHK8hmVVhhwL2K_cLEbNEH0-VQ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── ACCESO POR USUARIO ──────────────────────────────────
+let usuarioActual = null;  // { usuario, nombre, rol }
+
+async function validarAcceso() {
+  const u = document.getElementById('gate-user').value.trim();
+  const p = document.getElementById('gate-pass').value;
+  if (!u || !p) { document.getElementById('gate-error').style.display = 'block'; return; }
+
+  const btn = document.getElementById('gate-btn');
+  btn.disabled = true; btn.textContent = 'Verificando...';
+
+  const { data } = await sb.from('usuarios')
+    .select('usuario, nombre, rol, activo, clave')
+    .eq('usuario', u).eq('activo', true).maybeSingle();
+
+  btn.disabled = false; btn.textContent = 'Ingresar';
+
+  if (!data || data.clave !== p) {
+    document.getElementById('gate-error').style.display = 'block';
+    document.getElementById('gate-pass').value = '';
+    return;
+  }
+
+  usuarioActual = { usuario: data.usuario, nombre: data.nombre || data.usuario, rol: data.rol };
+  sessionStorage.setItem('usuario_actual', JSON.stringify(usuarioActual));
+  document.getElementById('login-gate').style.display = 'none';
+  aplicarPermisos();
+}
+
+// Reingreso dentro de la misma sesión del navegador
+(function() {
+  const guardado = sessionStorage.getItem('usuario_actual');
+  if (guardado) {
+    try {
+      usuarioActual = JSON.parse(guardado);
+      document.addEventListener('DOMContentLoaded', () => {
+        const g = document.getElementById('login-gate');
+        if (g) g.style.display = 'none';
+        aplicarPermisos();
+      });
+    } catch (_) {}
+  }
+})();
+
+// Aplica el rol: si es 'consulta', oculta acciones de edición/borrado
+function aplicarPermisos() {
+  if (!usuarioActual) return;
+  const esConsulta = usuarioActual.rol === 'consulta';
+  const cont = document.getElementById('usuario-header');
+  if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' · solo consulta' : ' · editor');
+  if (!esConsulta) return;
+
+  // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
+  const titulosAOcultar = ['Planificar capacitación', 'Carga masiva desde Excel',
+    'Agregar empleado individual', 'Agregar capacitación individual'];
+  document.querySelectorAll('.card').forEach(card => {
+    const h2 = card.querySelector('.card-header h2, h2');
+    if (h2 && titulosAOcultar.some(t => h2.textContent.includes(t))) {
+      card.style.display = 'none';
+    }
+  });
+
+  // Ocultar botones de acción en las tablas (Editar, Eliminar, Dar de baja, etc.)
+  // Se re-aplica cada vez que se recargan las tablas (ver engancheConsulta).
+  ocultarBotonesAccion();
+}
+
+function ocultarBotonesAccion() {
+  if (!usuarioActual || usuarioActual.rol !== 'consulta') return;
+  const textos = ['Editar', 'Eliminar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar'];
+  document.querySelectorAll('table button, .btn').forEach(b => {
+    if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
+  });
+  // Los campos de justificación editables quedan de solo lectura
+  document.querySelectorAll('#avance-wrap input, table input').forEach(i => i.setAttribute('readonly', 'true'));
+}
+
+// Reaplica el ocultamiento cuando cambian las tablas (los botones se regeneran al recargar)
+setInterval(() => { if (usuarioActual && usuarioActual.rol === 'consulta') ocultarBotonesAccion(); }, 1500);
+
+// Registrar una acción en la auditoría
+async function auditar(accion, entidad, descripcion) {
+  try {
+    await sb.from('auditoria').insert({
+      usuario: usuarioActual ? usuarioActual.usuario : '?',
+      accion, entidad, descripcion
+    });
+  } catch (_) {}
+}
+
+function cerrarSesionAdmin() {
+  sessionStorage.removeItem('usuario_actual');
+  location.reload();
+}
+// ────────────────────────────────────────────────────────
 
 let sortState = {};
 let datosGlobales = { sesiones: [], asistencias: [], empleados: [] };
@@ -979,6 +1119,7 @@ async function borrarSesion(id, titulo, nAsistentes) {
   const { error: e2 } = await sb.from('sesiones').delete().eq('id', id);
   if (e2) { toast('Error al borrar la sesión: ' + e2.message); return; }
 
+  auditar('borrar','sesion','Eliminó la sesión "'+titulo+'"');
   toast('Sesión eliminada.');
   cargarSesiones();
 }
@@ -1295,6 +1436,7 @@ async function agregarEmpleado() {
   if (error) { toast(error.message.includes('unique') ? 'Ese legajo ya existe.' : 'Error al guardar.'); return; }
   document.getElementById('e-legajo').value = '';
   document.getElementById('e-nombre').value = '';
+  auditar('crear','empleado','Agregó al empleado '+nombre+' (leg. '+legajo+')');
   toast('Empleado agregado.');
   cargarEmpleados();
 }
@@ -1371,6 +1513,7 @@ async function procesarMasivo() {
 async function darBajaEmp(id) {
   if (!confirm('¿Dar de baja este empleado? Podés reactivarlo después.')) return;
   await sb.from('empleados').update({ activo: false }).eq('id', id);
+  auditar('baja','empleado','Dio de baja a un empleado (id '+id+')');
   toast('Empleado dado de baja.');
   cargarEmpleados();
 }
@@ -1404,6 +1547,7 @@ async function eliminarEmp(id, nombre) {
   await sb.from('convocados').delete().eq('empleado_id', id);
   const { error } = await sb.from('empleados').delete().eq('id', id);
   if (error) { toast('Error al eliminar: ' + error.message); return; }
+  auditar('borrar','empleado','Eliminó definitivamente a '+nombre);
   toast('Empleado eliminado definitivamente.');
   cargarEmpleados();
 }
@@ -1442,6 +1586,7 @@ async function guardarEmp() {
   }).eq('id', id);
   if (error) { toast(error.message.includes('unique') ? 'Ese legajo ya existe.' : 'Error al guardar.'); return; }
   cerrarModalEmp();
+  auditar('editar','empleado','Editó al empleado '+nombre+' (leg. '+legajo+')');
   toast('Empleado actualizado.');
   cargarEmpleados();
 }
@@ -1502,6 +1647,7 @@ async function agregarCurso() {
   document.getElementById('c-horas').value = '';
   document.getElementById('c-temario').value = '';
   document.getElementById('c-costo').value = '';
+  auditar('crear','curso','Agregó la capacitación "'+titulo+'"');
   toast('Capacitación agregada.');
   cargarCursos();
   cargarCursosFiltro();
@@ -1570,6 +1716,7 @@ async function procesarMasivoCursos() {
 async function darBajaCurso(id) {
   if (!confirm('¿Desactivar esta capacitación? Podés reactivarla después.')) return;
   await sb.from('capacitaciones').update({ activa: false }).eq('id', id);
+  auditar('baja','curso','Desactivó una capacitación (id '+id+')');
   toast('Capacitación desactivada.');
   cargarCursos();
   cargarCursosFiltro();
@@ -1996,6 +2143,29 @@ function tab(id, el) {
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
   if (id === 't-avance') cargarAvance();
+  if (id === 't-auditoria') cargarAuditoria();
+}
+
+async function cargarAuditoria() {
+  const tbody = document.getElementById('body-auditoria');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Cargando...</td></tr>';
+  const { data } = await sb.from('auditoria').select('*').order('creado_at', { ascending: false }).limit(500);
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin registros todavía.</td></tr>';
+    return;
+  }
+  const colorAccion = { crear:'badge-green', editar:'badge-blue', borrar:'badge-red', baja:'badge-yellow', reactivar:'badge-gray' };
+  tbody.innerHTML = data.map(a => {
+    const f = new Date(a.creado_at);
+    const cls = colorAccion[a.accion] || 'badge-gray';
+    return `<tr>
+      <td style="white-space:nowrap;">${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td style="font-weight:500;">${a.usuario || '—'}</td>
+      <td><span class="badge ${cls}">${a.accion}</span></td>
+      <td>${a.entidad || '—'}</td>
+      <td style="color:#555;">${a.descripcion || '—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 function subtab(id, el) {
