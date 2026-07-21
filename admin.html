@@ -689,7 +689,7 @@ tr:hover td { background: #fafeff; }
 
         <div class="section-label">1 · Datos completos en Excel</div>
         <p style="font-size:13px;color:#666;margin-bottom:10px;">
-          Un archivo Excel con varias hojas: empleados, capacitaciones, sesiones, asistencias, convocados y plan.
+          Un archivo Excel con tres hojas: sesiones dictadas, asistencias registradas y ausentes (convocados que no asistieron).
         </p>
         <button class="btn btn-success" id="bk-btn-excel" onclick="backupExcel()">⬇ Descargar Excel completo</button>
 
@@ -902,7 +902,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -926,6 +926,15 @@ async function auditar(accion, entidad, descripcion) {
 function cerrarSesionAdmin() {
   sessionStorage.removeItem('usuario_actual');
   location.reload();
+}
+
+// Protección real (no solo visual): corta la acción si el usuario no es editor
+function requiereEditor() {
+  if (usuarioActual && usuarioActual.rol !== 'editor') {
+    toast('No tenés permiso para esta acción.');
+    return false;
+  }
+  return true;
 }
 // ────────────────────────────────────────────────────────
 
@@ -1093,6 +1102,7 @@ function cerrarModalVincular() {
 }
 
 async function guardarVinculo() {
+  if (!requiereEditor()) return;
   const sesionId = document.getElementById('vinc-sesion-id').value;
   const madreId = document.getElementById('vinc-madre').value || null;
   const { error } = await sb.from('sesiones').update({ sesion_madre_id: madreId }).eq('id', sesionId);
@@ -1103,6 +1113,7 @@ async function guardarVinculo() {
 }
 
 async function borrarSesion(id, titulo, nAsistentes) {
+  if (!requiereEditor()) return;
   const msg = nAsistentes > 0
     ? `¿Eliminar la sesión "${titulo}"? Tiene ${nAsistentes} asistencia(s) firmada(s) que también se borrarán. Esta acción no se puede deshacer.`
     : `¿Eliminar la sesión "${titulo}"? Esta acción no se puede deshacer.`;
@@ -1427,6 +1438,7 @@ async function validarEmp(id) {
 }
 
 async function agregarEmpleado() {
+  if (!requiereEditor()) return;
   const legajo = document.getElementById('e-legajo').value.trim();
   const nombre = document.getElementById('e-nombre').value.trim();
   const centro = document.getElementById('e-centro').value.trim();
@@ -1514,6 +1526,7 @@ async function procesarMasivo() {
 }
 
 async function darBajaEmp(id) {
+  if (!requiereEditor()) return;
   if (!confirm('¿Dar de baja este empleado? Podés reactivarlo después.')) return;
   await sb.from('empleados').update({ activo: false }).eq('id', id);
   auditar('baja','empleado','Dio de baja a un empleado (id '+id+')');
@@ -1528,6 +1541,7 @@ async function reactivarEmp(id) {
 }
 
 async function eliminarEmp(id, nombre) {
+  if (!requiereEditor()) return;
   // Contar asistencias del empleado
   const { count } = await sb.from('asistencias').select('id', { count: 'exact', head: true }).eq('empleado_id', id);
   const n = count || 0;
@@ -1574,6 +1588,7 @@ function cerrarModalEmp() {
 }
 
 async function guardarEmp() {
+  if (!requiereEditor()) return;
   const id = document.getElementById('edit-emp-id').value;
   const legajo = document.getElementById('edit-emp-legajo').value.trim();
   const nombre = document.getElementById('edit-emp-nombre').value.trim();
@@ -1636,6 +1651,7 @@ async function cargarCursosFiltro() {
 }
 
 async function agregarCurso() {
+  if (!requiereEditor()) return;
   const titulo = document.getElementById('c-titulo').value.trim();
   const tipo = document.getElementById('c-tipo').value;
   const responsable = document.getElementById('c-responsable').value.trim();
@@ -1717,6 +1733,7 @@ async function procesarMasivoCursos() {
 }
 
 async function darBajaCurso(id) {
+  if (!requiereEditor()) return;
   if (!confirm('¿Desactivar esta capacitación? Podés reactivarla después.')) return;
   await sb.from('capacitaciones').update({ activa: false }).eq('id', id);
   auditar('baja','curso','Desactivó una capacitación (id '+id+')');
@@ -1735,6 +1752,7 @@ async function reactivarCurso(id) {
 }
 
 async function eliminarCurso(id, titulo) {
+  if (!requiereEditor()) return;
   // Contar sesiones del curso
   const { count } = await sb.from('sesiones').select('id', { count: 'exact', head: true }).eq('capacitacion_id', id);
   const n = count || 0;
@@ -1782,6 +1800,7 @@ function cerrarModalCurso() {
 }
 
 async function guardarCurso() {
+  if (!requiereEditor()) return;
   const id = document.getElementById('edit-curso-id').value;
   const titulo = document.getElementById('edit-curso-titulo').value.trim();
   if (!titulo) { toast('Completá el título.'); return; }
@@ -1852,8 +1871,10 @@ async function cargarPlan() {
 }
 
 async function borrarPlan(id) {
+  if (usuarioActual && usuarioActual.rol !== 'editor') { toast('No tenés permiso para esta acción.'); return; }
   if (!confirm('¿Quitar esta planificación?')) return;
   await sb.from('plan_capacitacion').delete().eq('id', id);
+  auditar('borrar', 'plan', 'Quitó una capacitación del plan (id ' + id + ')');
   toast('Quitado del plan.');
   cargarPlan();
 }
@@ -2019,6 +2040,7 @@ async function cargarAvance() {
 }
 
 async function guardarJustificacion(planId, texto) {
+  if (!requiereEditor()) return;
   const { error } = await sb.from('plan_capacitacion').update({ justificacion: texto.trim() }).eq('id', planId);
   if (error) { toast('Error al guardar la justificación.'); return; }
   toast('Justificación guardada.');
@@ -2041,33 +2063,18 @@ async function backupExcel() {
   btn.disabled = true; btn.textContent = 'Generando...';
 
   try {
-    // Traer todo
-    const [empleados, capacitaciones, sesiones, plan] = await Promise.all([
-      sb.from('empleados').select('*').order('nombre'),
-      sb.from('capacitaciones').select('*').order('codigo'),
-      sb.from('sesiones').select('*, capacitaciones(titulo, tipo, codigo)').gte('fecha', desde).lte('fecha', hasta).order('fecha'),
-      sb.from('plan_capacitacion').select('*, capacitaciones(titulo, codigo)').order('periodo')
-    ]);
+    const sesiones = await sb.from('sesiones')
+      .select('*, capacitaciones(titulo, tipo, codigo)').gte('fecha', desde).lte('fecha', hasta).order('fecha');
 
     const sesIds = (sesiones.data || []).map(s => s.id);
     let asistencias = { data: [] };
     let convocados = { data: [] };
     if (sesIds.length) {
       asistencias = await sb.from('asistencias').select('*, empleados(legajo, nombre, sector), sesiones(fecha, centro, capacitaciones(titulo))').in('sesion_id', sesIds);
-      convocados = await sb.from('convocados').select('*, empleados(legajo, nombre), sesiones(fecha, capacitaciones(titulo))').in('sesion_id', sesIds);
+      convocados = await sb.from('convocados').select('*, empleados(id, legajo, nombre, sector, activo), sesiones(fecha, centro, capacitaciones(titulo))').in('sesion_id', sesIds);
     }
 
     const wb = XLSX.utils.book_new();
-
-    // Hoja Empleados
-    const hEmp = [['Legajo','Nombre','Centro','Sector','Contrato','Genero','Convenio','Activo','Auto-agregado']];
-    (empleados.data||[]).forEach(e => hEmp.push([e.legajo, e.nombre, e.centro||'', e.sector||'', e.contrato||'', e.genero||'', e.convenio||'', e.activo?'Sí':'No', e.auto_agregado?'Sí':'No']));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hEmp), 'Empleados');
-
-    // Hoja Capacitaciones
-    const hCap = [['Codigo','Titulo','Tipo','Duracion (hs)','Responsable','Activa']];
-    (capacitaciones.data||[]).forEach(c => hCap.push([c.codigo||'', c.titulo, c.tipo||'', c.duracion_horas||'', c.responsable||'', c.activa?'Sí':'No']));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hCap), 'Capacitaciones');
 
     // Hoja Sesiones
     const hSes = [['Fecha','Codigo','Capacitacion','Tipo','Centro','Lugar','Instructor','Estado','Verif. eficacia']];
@@ -2079,15 +2086,16 @@ async function backupExcel() {
     (asistencias.data||[]).forEach(a => hAsi.push([formatFecha(a.sesiones?.fecha||''), a.sesiones?.capacitaciones?.titulo||'', a.sesiones?.centro||'', a.empleados?.legajo||'', a.empleados?.nombre||'', a.empleados?.sector||'', a.firmado_at?new Date(a.firmado_at).toLocaleString('es-AR'):'']));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hAsi), 'Asistencias');
 
-    // Hoja Convocados
-    const hConv = [['Fecha','Capacitacion','Legajo','Nombre']];
-    (convocados.data||[]).forEach(c => hConv.push([formatFecha(c.sesiones?.fecha||''), c.sesiones?.capacitaciones?.titulo||'', c.empleados?.legajo||'', c.empleados?.nombre||'']));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hConv), 'Convocados');
-
-    // Hoja Plan
-    const hPlan = [['Periodo','Codigo','Capacitacion','Centro','Mes']];
-    (plan.data||[]).forEach(p => hPlan.push(['Jul '+p.periodo+' - Jun '+(p.periodo+1), p.capacitaciones?.codigo||'', p.capacitaciones?.titulo||'', p.centro, MESES[p.mes]]));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hPlan), 'Plan');
+    // Hoja Ausentes: convocados (activos) que no tienen asistencia registrada en esa sesión
+    const asistieronSet = new Set((asistencias.data||[]).map(a => a.sesion_id + '_' + a.empleado_id));
+    const hAus = [['Fecha','Capacitacion','Centro','Legajo','Nombre','Sector']];
+    (convocados.data||[]).forEach(c => {
+      if (!c.empleados || c.empleados.activo === false) return;
+      const key = c.sesion_id + '_' + c.empleado_id;
+      if (asistieronSet.has(key)) return;
+      hAus.push([formatFecha(c.sesiones?.fecha||''), c.sesiones?.capacitaciones?.titulo||'', c.sesiones?.centro||'', c.empleados?.legajo||'', c.empleados?.nombre||'', c.empleados?.sector||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hAus), 'Ausentes');
 
     XLSX.writeFile(wb, 'Backup_Capacitaciones_' + desde + '_a_' + hasta + '.xlsx');
     toast('Backup Excel generado.');
