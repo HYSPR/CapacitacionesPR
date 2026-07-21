@@ -125,7 +125,6 @@ tr:hover td { background: #fafeff; }
 .badge-gray { background: #f0f0f0; color: #666; }
 .badge-red { background: #FDECEC; color: #c0392b; }
 /* Modo consulta: ocultar formularios de alta y botones de acción */
-body.solo-consulta .accion-editor { display: none !important; }
 #usuario-header { font-size: 12px; color: rgba(255,255,255,0.85); }
 
 /* ── PROGRESS BAR ── */
@@ -853,7 +852,7 @@ async function validarAcceso() {
     return;
   }
 
-  usuarioActual = { usuario: data.usuario, nombre: data.nombre || data.usuario, rol: data.rol };
+  usuarioActual = { usuario: data.usuario, nombre: data.nombre || data.usuario, rol: (data.rol || 'consulta').trim().toLowerCase() };
   sessionStorage.setItem('usuario_actual', JSON.stringify(usuarioActual));
   document.getElementById('login-gate').style.display = 'none';
   aplicarPermisos();
@@ -877,9 +876,15 @@ async function validarAcceso() {
 // Aplica el rol: si es 'consulta', oculta acciones de edición/borrado
 function aplicarPermisos() {
   if (!usuarioActual) return;
-  const esConsulta = usuarioActual.rol === 'consulta';
+  const esConsulta = usuarioActual.rol !== 'editor';
   const cont = document.getElementById('usuario-header');
   if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' · solo consulta' : ' · editor');
+
+  // La pestaña Registro (auditoría) SOLO la ven los editores
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.textContent.trim() === 'Registro') t.style.display = esConsulta ? 'none' : '';
+  });
+
   if (!esConsulta) return;
 
   // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
@@ -892,13 +897,11 @@ function aplicarPermisos() {
     }
   });
 
-  // Ocultar botones de acción en las tablas (Editar, Eliminar, Dar de baja, etc.)
-  // Se re-aplica cada vez que se recargan las tablas (ver engancheConsulta).
   ocultarBotonesAccion();
 }
 
 function ocultarBotonesAccion() {
-  if (!usuarioActual || usuarioActual.rol !== 'consulta') return;
+  if (!usuarioActual || usuarioActual.rol === 'editor') return;
   const textos = ['Editar', 'Eliminar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
@@ -908,7 +911,7 @@ function ocultarBotonesAccion() {
 }
 
 // Reaplica el ocultamiento cuando cambian las tablas (los botones se regeneran al recargar)
-setInterval(() => { if (usuarioActual && usuarioActual.rol === 'consulta') ocultarBotonesAccion(); }, 1500);
+setInterval(() => { if (usuarioActual && usuarioActual.rol !== 'editor') ocultarBotonesAccion(); }, 1500);
 
 // Registrar una acción en la auditoría
 async function auditar(accion, entidad, descripcion) {
