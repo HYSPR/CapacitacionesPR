@@ -251,21 +251,21 @@ tr:hover td { background: #fafeff; }
 </div>
 
 <div class="nav">
-  <div class="nav-tab active" onclick="tab('t-tablero', this)">Tablero</div>
-  <div class="nav-tab" onclick="tab('t-sesiones', this)">Sesiones</div>
+  <div class="nav-tab active" onclick="tab('t-sesiones', this)">Sesiones</div>
   <div class="nav-tab" onclick="tab('t-avance', this)">Avance del plan</div>
   <div class="nav-tab" onclick="tab('t-seguimiento', this)">Seguimiento</div>
   <div class="nav-tab" onclick="tab('t-plan', this)">Plan</div>
   <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
   <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
   <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
+  <div class="nav-tab" onclick="tab('t-tablero', this)">KPIs</div>
 </div>
 
 <div class="container">
 
   <!-- ══ TAB: SESIONES ══ -->
   <!-- ══ TAB: TABLERO ══ -->
-  <div class="tab-content active" id="t-tablero">
+  <div class="tab-content" id="t-tablero">
 
     <!-- Filtros -->
     <div class="card" style="margin-bottom:16px;">
@@ -360,7 +360,7 @@ tr:hover td { background: #fafeff; }
 
   </div>
 
-  <div class="tab-content" id="t-sesiones">
+  <div class="tab-content active" id="t-sesiones">
     <div class="metrics">
       <div class="metric">
         <div class="metric-label">Sesiones este año</div>
