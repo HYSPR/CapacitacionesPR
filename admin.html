@@ -127,6 +127,25 @@ tr:hover td { background: #fafeff; }
 /* Modo consulta: ocultar formularios de alta y botones de acción */
 #usuario-header { font-size: 12px; color: rgba(255,255,255,0.85); }
 
+/* ── TABLERO ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.kpi-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; }
+.kpi-value { font-size: 26px; font-weight: 700; color: #1B4F8A; line-height: 1.1; }
+.kpi-sub { font-size: 11px; color: #aaa; margin-top: 4px; }
+.kpi.alerta .kpi-value { color: #c0392b; }
+.kpi.ok .kpi-value { color: #1A6B3C; }
+
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; font-size: 12px; }
+.bar-label { width: 108px; flex-shrink: 0; color: #555; text-align: right;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { flex: 1; background: #f0f2f5; border-radius: 4px; height: 18px; position: relative; }
+.bar-fill { background: #1B4F8A; height: 100%; border-radius: 4px; min-width: 2px; transition: width .3s; }
+.bar-fill.verde { background: #1A6B3C; }
+.bar-fill.amarillo { background: #E8A33D; }
+.bar-num { width: 52px; flex-shrink: 0; font-weight: 600; color: #333; font-size: 12px; }
+
 /* ── PROGRESS BAR ── */
 .prog { display: flex; align-items: center; gap: 8px; }
 .prog-bar { flex: 1; height: 5px; background: #eee; border-radius: 99px; overflow: hidden; min-width: 50px; }
@@ -232,20 +251,116 @@ tr:hover td { background: #fafeff; }
 </div>
 
 <div class="nav">
-  <div class="nav-tab active" onclick="tab('t-sesiones', this)">Sesiones</div>
+  <div class="nav-tab active" onclick="tab('t-tablero', this)">Tablero</div>
+  <div class="nav-tab" onclick="tab('t-sesiones', this)">Sesiones</div>
   <div class="nav-tab" onclick="tab('t-avance', this)">Avance del plan</div>
   <div class="nav-tab" onclick="tab('t-seguimiento', this)">Seguimiento</div>
   <div class="nav-tab" onclick="tab('t-plan', this)">Plan</div>
   <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
   <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
   <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
-  <div class="nav-tab accion-editor" onclick="tab('t-auditoria', this)">Registro</div>
 </div>
 
 <div class="container">
 
   <!-- ══ TAB: SESIONES ══ -->
-  <div class="tab-content active" id="t-sesiones">
+  <!-- ══ TAB: TABLERO ══ -->
+  <div class="tab-content active" id="t-tablero">
+
+    <!-- Filtros -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="filters" style="border-radius:10px;">
+        <div class="filter-group">
+          <label>Año fiscal (Jul–Jun)</label>
+          <select id="tb-periodo" onchange="cargarTablero()"></select>
+        </div>
+        <div class="filter-group">
+          <label>Centro</label>
+          <select id="tb-centro" onchange="cargarTablero()">
+            <option value="">Todos los centros</option>
+            <option>Bella Vista</option><option>San Rafael</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Mes</label>
+          <select id="tb-mes" onchange="cargarTablero()">
+            <option value="">Todos los meses</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Tipo</label>
+          <select id="tb-tipo" onchange="cargarTablero()">
+            <option value="">Todos</option>
+            <option>Functional Skills</option>
+            <option>Management, leadership and personal development (soft skills)</option>
+            <option>Languages training</option>
+            <option>Other training</option>
+            <option>Health, safety and environment</option>
+            <option>IT (hardware / Software tools Trainings)</option>
+          </select>
+        </div>
+        <div class="filter-group" style="flex:0;">
+          <label>&nbsp;</label>
+          <button class="btn btn-outline btn-sm" onclick="cargarTablero()">Actualizar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid" id="tb-kpis">
+      <div class="kpi"><div class="kpi-label">Cumplimiento del plan</div><div class="kpi-value" id="k-cumpl">—</div><div class="kpi-sub" id="k-cumpl-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Capacitaciones dictadas</div><div class="kpi-value" id="k-dictadas">—</div><div class="kpi-sub" id="k-dictadas-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Horas dictadas</div><div class="kpi-value" id="k-horas">—</div><div class="kpi-sub" id="k-horas-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Personas capacitadas</div><div class="kpi-value" id="k-personas">—</div><div class="kpi-sub">únicas en el período</div></div>
+      <div class="kpi"><div class="kpi-label">Asistencia</div><div class="kpi-value" id="k-asistencia">—</div><div class="kpi-sub" id="k-asistencia-sub"></div></div>
+      <div class="kpi"><div class="kpi-label">Costo total</div><div class="kpi-value" id="k-costo">—</div><div class="kpi-sub" id="k-costo-sub"></div></div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-header"><h2>Horas dictadas por mes</h2></div>
+        <div class="card-body" id="ch-meses"><div style="color:#bbb;font-size:13px;">Cargando...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Capacitaciones por centro</h2></div>
+        <div class="card-body" id="ch-centros"><div style="color:#bbb;font-size:13px;">Cargando...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Capacitaciones por tipo</h2></div>
+        <div class="card-body" id="ch-tipos"><div style="color:#bbb;font-size:13px;">Cargando...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Horas con parada de línea</h2></div>
+        <div class="card-body" id="ch-parada"><div style="color:#bbb;font-size:13px;">Cargando...</div></div>
+      </div>
+    </div>
+
+    <!-- Tablas de atención -->
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-header"><h2>Sectores con más ausentes</h2></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Sector</th><th>Ausencias</th></tr></thead>
+          <tbody id="tb-sectores"><tr class="empty-row"><td colspan="2">Cargando...</td></tr></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>Capacitaciones con desvío</h2></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th></tr></thead>
+          <tbody id="tb-desvios"><tr class="empty-row"><td colspan="4">Cargando...</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tab-content" id="t-sesiones">
     <div class="metrics">
       <div class="metric">
         <div class="metric-label">Sesiones este año</div>
@@ -265,7 +380,7 @@ tr:hover td { background: #fafeff; }
       <div class="metric">
         <div class="metric-label">Horas dictadas</div>
         <div class="metric-value" id="m-horas">—</div>
-        <div class="metric-sub">este año</div>
+        <div class="metric-sub" id="m-horas-sub">este año</div>
       </div>
     </div>
 
@@ -280,6 +395,16 @@ tr:hover td { background: #fafeff; }
           <select id="ses-centro" onchange="cargarSesiones()">
             <option value="">Todos los centros</option>
             <option>Bella Vista</option><option>San Rafael</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Mes</label>
+          <select id="ses-mes" onchange="cargarSesiones()">
+            <option value="">Todos los meses</option>
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
           </select>
         </div>
         <div class="filter-group">
@@ -711,22 +836,6 @@ tr:hover td { background: #fafeff; }
     </div>
   </div>
 
-  <!-- ══ TAB: AUDITORÍA ══ -->
-  <div class="tab-content" id="t-auditoria">
-    <div class="card">
-      <div class="card-header">
-        <h2>Registro de acciones</h2>
-        <button class="btn btn-outline btn-sm" onclick="cargarAuditoria()">Actualizar</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Acción</th><th>Sobre</th><th>Detalle</th></tr></thead>
-          <tbody id="body-auditoria"><tr class="empty-row"><td colspan="5">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 <!-- MODAL: EDITAR EMPLEADO -->
@@ -892,11 +1001,6 @@ function aplicarPermisos() {
   const cont = document.getElementById('usuario-header');
   if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' · solo consulta' : ' · editor');
 
-  // La pestaña Registro (auditoría) SOLO la ven los editores
-  document.querySelectorAll('.nav-tab').forEach(t => {
-    if (t.textContent.trim() === 'Registro') t.style.display = esConsulta ? 'none' : '';
-  });
-
   if (!esConsulta) return;
 
   // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
@@ -969,6 +1073,7 @@ window.addEventListener('load', () => {
 
 async function cargarTodo() {
   await Promise.all([cargarSesiones(), cargarEmpleados(), cargarCursos(), cargarSectores(), cargarCursosFiltro(), cargarPlanCursos(), cargarPlan()]);
+  cargarTablero();
 }
 
 // ── PERÍODOS (ciclo julio–junio) ──
@@ -983,7 +1088,7 @@ function nombrePeriodo(p) { return 'Jul ' + p + ' – Jun ' + (p + 1); }
 function inicializarPeriodos() {
   const actual = periodoActual();
   const opciones = [actual - 1, actual, actual + 1];
-  ['av-periodo', 'pl-periodo', 'pl-filtro-periodo', 'ses-periodo'].forEach(id => {
+  ['av-periodo', 'pl-periodo', 'pl-filtro-periodo', 'ses-periodo', 'tb-periodo'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     sel.innerHTML = '';
@@ -1007,6 +1112,7 @@ async function cargarSesiones() {
   const periodo = parseInt(document.getElementById('ses-periodo')?.value) || periodoActual();
   const centroF = document.getElementById('ses-centro')?.value || '';
   const estadoF = document.getElementById('ses-estado')?.value || '';
+  const mesF = document.getElementById('ses-mes')?.value || '';
 
   // Rango del año fiscal: jul del periodo a jun del siguiente
   const desde = periodo + '-07-01';
@@ -1020,7 +1126,10 @@ async function cargarSesiones() {
   if (estadoF) q = q.eq('estado', estadoF);
   const { data: ses } = await q;
 
-  const sesiones = ses || [];
+  // El mes se filtra en el cliente (es un campo derivado de la fecha)
+  let sesiones = ses || [];
+  if (mesF) sesiones = sesiones.filter(s => s.fecha && parseInt(s.fecha.slice(5,7)) === parseInt(mesF));
+
   const sesIds = sesiones.map(s => s.id);
 
   let asistencias = [];
@@ -1033,12 +1142,14 @@ async function cargarSesiones() {
   asistencias.forEach(a => { conteo[a.sesion_id] = (conteo[a.sesion_id] || 0) + 1; });
 
   document.getElementById('m-sesiones').textContent = sesiones.length;
-  document.getElementById('m-sesiones-sub').textContent = nombrePeriodo(periodo);
+  const nombresMes = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('m-sesiones-sub').textContent = mesF ? (nombresMes[parseInt(mesF)] + ' · ' + nombrePeriodo(periodo)) : nombrePeriodo(periodo);
   document.getElementById('m-asistencias').textContent = asistencias.length;
   const personasU = new Set(asistencias.map(a => a.empleado_id)).size;
   document.getElementById('m-personas').textContent = personasU;
   const horas = sesiones.reduce((acc, s) => acc + (s.capacitaciones?.duracion_horas || 0), 0);
   document.getElementById('m-horas').textContent = horas.toFixed(1);
+  document.getElementById('m-horas-sub').textContent = mesF ? nombresMes[parseInt(mesF)] : 'este año';
 
   const tbody = document.getElementById('body-sesiones');
   if (!sesiones.length) {
@@ -2168,6 +2279,186 @@ async function backupPDFs() {
   btn.disabled = false;
 }
 
+// ── TABLERO ──
+function barra(label, valor, max, colorClase, sufijo) {
+  const pct = max > 0 ? (valor / max * 100) : 0;
+  return `<div class="bar-row">
+    <div class="bar-label" title="${label}">${label}</div>
+    <div class="bar-track"><div class="bar-fill ${colorClase||''}" style="width:${pct.toFixed(1)}%"></div></div>
+    <div class="bar-num">${valor}${sufijo||''}</div>
+  </div>`;
+}
+
+async function cargarTablero() {
+  const periodo = parseInt(document.getElementById('tb-periodo').value) || periodoActual();
+  const centroF = document.getElementById('tb-centro').value;
+  const mesF = document.getElementById('tb-mes').value;
+  const tipoF = document.getElementById('tb-tipo').value;
+
+  const desde = periodo + '-07-01';
+  const hasta = (periodo + 1) + '-06-30';
+
+  // 1. Sesiones cerradas del período
+  let qSes = sb.from('sesiones')
+    .select('*, capacitaciones(id, titulo, tipo, duracion_horas, costo, parada_linea)')
+    .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
+  if (centroF) qSes = qSes.eq('centro', centroF);
+  const { data: sesRaw } = await qSes;
+
+  let sesiones = sesRaw || [];
+  if (mesF) sesiones = sesiones.filter(s => s.fecha && parseInt(s.fecha.slice(5,7)) === parseInt(mesF));
+  if (tipoF) sesiones = sesiones.filter(s => s.capacitaciones?.tipo === tipoF);
+
+  const sesIds = sesiones.map(s => s.id);
+
+  // 2. Asistencias y convocados
+  let asistencias = [], convocados = [];
+  if (sesIds.length) {
+    const { data: a } = await sb.from('asistencias')
+      .select('sesion_id, empleado_id, empleados(sector, activo)').in('sesion_id', sesIds).eq('anulada', false);
+    asistencias = a || [];
+    const { data: c } = await sb.from('convocados')
+      .select('sesion_id, empleado_id, empleados(sector, activo)').in('sesion_id', sesIds);
+    convocados = c || [];
+  }
+
+  // 3. Plan del período (para cumplimiento y desvíos)
+  let qPlan = sb.from('plan_capacitacion')
+    .select('*, capacitaciones(titulo, tipo, duracion_horas)').eq('periodo', periodo);
+  if (centroF) qPlan = qPlan.eq('centro', centroF);
+  const { data: planRaw } = await qPlan;
+  let plan = planRaw || [];
+  if (tipoF) plan = plan.filter(p => p.capacitaciones?.tipo === tipoF);
+  if (mesF) plan = plan.filter(p => p.mes === parseInt(mesF));
+
+  // ── KPIs ──
+  // Cumplimiento: líneas del plan que tienen al menos una sesión dictada
+  let realizadas = 0;
+  const hoy = new Date();
+  const mesActualCal = hoy.getMonth() + 1, anioActualCal = hoy.getFullYear();
+  const desvios = [];
+  plan.forEach(p => {
+    const sesDelPlan = sesiones.filter(s => s.capacitacion_id === p.capacitacion_id && s.centro === p.centro);
+    if (sesDelPlan.length) {
+      realizadas++;
+      const mesDictado = parseInt(sesDelPlan.sort((a,b)=>a.fecha<b.fecha?-1:1)[0].fecha.slice(5,7));
+      if (mesDictado !== p.mes) {
+        const ordenPlan = (p.mes >= 7 ? p.mes - 7 : p.mes + 5);
+        const ordenDict = (mesDictado >= 7 ? mesDictado - 7 : mesDictado + 5);
+        desvios.push({ p, estado: ordenDict < ordenPlan ? 'Adelantada' : 'Atrasada' });
+      }
+    } else {
+      const anioPlan = anioDeMes(p.mes, periodo);
+      const yaPaso = (anioPlan < anioActualCal) || (anioPlan === anioActualCal && p.mes < mesActualCal);
+      if (yaPaso) desvios.push({ p, estado: 'No realizada' });
+    }
+  });
+
+  const pctCumpl = plan.length ? Math.round(realizadas / plan.length * 100) : null;
+  const kCumpl = document.getElementById('k-cumpl');
+  kCumpl.textContent = pctCumpl === null ? '—' : pctCumpl + '%';
+  kCumpl.parentElement.className = 'kpi' + (pctCumpl === null ? '' : (pctCumpl >= 80 ? ' ok' : (pctCumpl < 50 ? ' alerta' : '')));
+  document.getElementById('k-cumpl-sub').textContent = plan.length ? realizadas + ' de ' + plan.length + ' planificadas' : 'sin plan cargado';
+
+  document.getElementById('k-dictadas').textContent = sesiones.length;
+  const capsUnicas = new Set(sesiones.map(s => s.capacitacion_id)).size;
+  document.getElementById('k-dictadas-sub').textContent = capsUnicas + ' capacitación(es) distinta(s)';
+
+  const horas = sesiones.reduce((acc, s) => acc + (s.capacitaciones?.duracion_horas || 0), 0);
+  document.getElementById('k-horas').textContent = horas.toFixed(1);
+  document.getElementById('k-horas-sub').textContent = mesF ? MESES[parseInt(mesF)] : nombrePeriodo(periodo);
+
+  const personasU = new Set(asistencias.map(a => a.empleado_id)).size;
+  document.getElementById('k-personas').textContent = personasU;
+
+  // Asistencia = asistentes / convocados (por sesión-persona)
+  const asisSet = new Set(asistencias.map(a => a.sesion_id + '_' + a.empleado_id));
+  const convValidos = convocados.filter(c => !c.empleados || c.empleados.activo !== false);
+  const presentes = convValidos.filter(c => asisSet.has(c.sesion_id + '_' + c.empleado_id)).length;
+  const pctAsis = convValidos.length ? Math.round(presentes / convValidos.length * 100) : null;
+  const kAsis = document.getElementById('k-asistencia');
+  kAsis.textContent = pctAsis === null ? '—' : pctAsis + '%';
+  kAsis.parentElement.className = 'kpi' + (pctAsis === null ? '' : (pctAsis >= 90 ? ' ok' : (pctAsis < 70 ? ' alerta' : '')));
+  document.getElementById('k-asistencia-sub').textContent = convValidos.length
+    ? presentes + ' de ' + convValidos.length + ' convocados' : 'sin convocados registrados';
+
+  // Costo: suma del costo del curso por cada sesión dictada
+  const costo = sesiones.reduce((acc, s) => acc + (s.capacitaciones?.costo || 0), 0);
+  document.getElementById('k-costo').textContent = '$' + Number(costo).toLocaleString('es-AR');
+  document.getElementById('k-costo-sub').textContent = personasU
+    ? '$' + Math.round(costo / personasU).toLocaleString('es-AR') + ' por persona' : '';
+
+  // ── GRÁFICO: horas por mes (orden fiscal jul→jun) ──
+  const ordenFiscal = [7,8,9,10,11,12,1,2,3,4,5,6];
+  const horasMes = {};
+  ordenFiscal.forEach(m => horasMes[m] = 0);
+  sesiones.forEach(s => {
+    const m = parseInt(s.fecha.slice(5,7));
+    horasMes[m] = (horasMes[m] || 0) + (s.capacitaciones?.duracion_horas || 0);
+  });
+  const maxMes = Math.max(...Object.values(horasMes), 1);
+  document.getElementById('ch-meses').innerHTML =
+    ordenFiscal.map(m => barra(MESES[m], +horasMes[m].toFixed(1), maxMes, '', ' hs')).join('')
+    || '<div style="color:#bbb;font-size:13px;">Sin datos.</div>';
+
+  // ── GRÁFICO: por centro ──
+  const porCentro = {};
+  sesiones.forEach(s => {
+    const c = s.centro || (s.modalidad === 'online' ? 'Online (todas)' : 'Sin centro');
+    porCentro[c] = (porCentro[c] || 0) + 1;
+  });
+  const maxCentro = Math.max(...Object.values(porCentro), 1);
+  document.getElementById('ch-centros').innerHTML = Object.keys(porCentro).length
+    ? Object.entries(porCentro).sort((a,b)=>b[1]-a[1]).map(([c,n]) => barra(c, n, maxCentro, 'verde', '')).join('')
+    : '<div style="color:#bbb;font-size:13px;">Sin datos.</div>';
+
+  // ── GRÁFICO: por tipo ──
+  const porTipo = {};
+  sesiones.forEach(s => {
+    const t = s.capacitaciones?.tipo || 'Sin tipo';
+    porTipo[t] = (porTipo[t] || 0) + 1;
+  });
+  const maxTipo = Math.max(...Object.values(porTipo), 1);
+  document.getElementById('ch-tipos').innerHTML = Object.keys(porTipo).length
+    ? Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).map(([t,n]) => barra(t, n, maxTipo, '', '')).join('')
+    : '<div style="color:#bbb;font-size:13px;">Sin datos.</div>';
+
+  // ── GRÁFICO: parada de línea ──
+  let hsParada = 0, hsSinParada = 0;
+  sesiones.forEach(s => {
+    const h = s.capacitaciones?.duracion_horas || 0;
+    if (s.capacitaciones?.parada_linea) hsParada += h; else hsSinParada += h;
+  });
+  const maxPar = Math.max(hsParada, hsSinParada, 1);
+  document.getElementById('ch-parada').innerHTML =
+    barra('Con parada', +hsParada.toFixed(1), maxPar, 'amarillo', ' hs') +
+    barra('Sin parada', +hsSinParada.toFixed(1), maxPar, 'verde', ' hs') +
+    (horas > 0 ? `<div style="font-size:12px;color:#888;margin-top:8px;">${Math.round(hsParada/horas*100)}% de las horas implicaron parada de línea.</div>` : '');
+
+  // ── TABLA: sectores con más ausentes ──
+  const ausPorSector = {};
+  convValidos.forEach(c => {
+    if (asisSet.has(c.sesion_id + '_' + c.empleado_id)) return;
+    const sec = c.empleados?.sector || 'Sin sector';
+    ausPorSector[sec] = (ausPorSector[sec] || 0) + 1;
+  });
+  const topSec = Object.entries(ausPorSector).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  document.getElementById('tb-sectores').innerHTML = topSec.length
+    ? topSec.map(([s,n]) => `<tr><td>${s}</td><td style="font-weight:600;color:#c0392b;">${n}</td></tr>`).join('')
+    : '<tr class="empty-row"><td colspan="2">Sin ausencias registradas.</td></tr>';
+
+  // ── TABLA: capacitaciones con desvío ──
+  const estiloD = { 'Adelantada':'badge-blue', 'Atrasada':'badge-yellow', 'No realizada':'badge-red' };
+  document.getElementById('tb-desvios').innerHTML = desvios.length
+    ? desvios.sort((a,b)=>a.p.mes-b.p.mes).map(d => `<tr>
+        <td style="font-weight:500;">${d.p.capacitaciones?.titulo || '—'}</td>
+        <td>${d.p.centro}</td>
+        <td>${MESES[d.p.mes]}</td>
+        <td><span class="badge ${estiloD[d.estado]}">${d.estado}</span></td>
+      </tr>`).join('')
+    : '<tr class="empty-row"><td colspan="4">Sin desvíos. Todo en fecha.</td></tr>';
+}
+
 // ── HELPERS ──
 function tab(id, el) {
   // Solo las pestañas principales (hijas directas de .container), no las sub-tabs
@@ -2176,29 +2467,7 @@ function tab(id, el) {
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
   if (id === 't-avance') cargarAvance();
-  if (id === 't-auditoria') cargarAuditoria();
-}
-
-async function cargarAuditoria() {
-  const tbody = document.getElementById('body-auditoria');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Cargando...</td></tr>';
-  const { data } = await sb.from('auditoria').select('*').order('creado_at', { ascending: false }).limit(500);
-  if (!data || !data.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin registros todavía.</td></tr>';
-    return;
-  }
-  const colorAccion = { crear:'badge-green', editar:'badge-blue', borrar:'badge-red', baja:'badge-yellow', reactivar:'badge-gray' };
-  tbody.innerHTML = data.map(a => {
-    const f = new Date(a.creado_at);
-    const cls = colorAccion[a.accion] || 'badge-gray';
-    return `<tr>
-      <td style="white-space:nowrap;">${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</td>
-      <td style="font-weight:500;">${a.usuario || '—'}</td>
-      <td><span class="badge ${cls}">${a.accion}</span></td>
-      <td>${a.entidad || '—'}</td>
-      <td style="color:#555;">${a.descripcion || '—'}</td>
-    </tr>`;
-  }).join('');
+  if (id === 't-tablero') cargarTablero();
 }
 
 function subtab(id, el) {
