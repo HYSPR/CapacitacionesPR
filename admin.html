@@ -279,7 +279,7 @@ tr:hover td { background: #fafeff; }
           <label>Centro</label>
           <select id="ses-centro" onchange="cargarSesiones()">
             <option value="">Todos los centros</option>
-            <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+            <option>Bella Vista</option><option>San Rafael</option>
           </select>
         </div>
         <div class="filter-group">
@@ -332,7 +332,7 @@ tr:hover td { background: #fafeff; }
         <label>Centro</label>
         <select id="av-centro">
           <option value="">Todos los centros</option>
-          <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+          <option>Bella Vista</option><option>San Rafael</option>
         </select>
       </div>
       <button class="btn btn-primary" onclick="cargarAvance()">Aplicar</button>
@@ -387,7 +387,7 @@ tr:hover td { background: #fafeff; }
           <div class="form-group">
             <label>Centro</label>
             <select id="pl-centro">
-              <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+              <option>Bella Vista</option><option>San Rafael</option>
             </select>
           </div>
           <div class="form-group">
@@ -579,7 +579,7 @@ tr:hover td { background: #fafeff; }
           </label>
           <select id="f-emp-centro" onchange="cargarEmpleados()" style="padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;">
             <option value="">Todos los centros</option>
-            <option>Bella Vista</option><option>San Rafael</option><option>Cafayate</option>
+            <option>Bella Vista</option><option>San Rafael</option>
           </select>
           <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [0,1,2])">
         </div>
@@ -640,6 +640,12 @@ tr:hover td { background: #fafeff; }
         <div class="form-group" style="max-width:33%;">
           <label>Costo total del curso ($)</label>
           <input type="number" id="c-costo" placeholder="0" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="c-parada-linea" style="width:auto;">
+            Implica parada de línea
+          </label>
         </div>
         <button class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
       </div>
@@ -791,6 +797,12 @@ tr:hover td { background: #fafeff; }
     <div class="form-group" style="max-width:50%;">
       <label>Costo total del curso ($)</label>
       <input type="number" id="edit-curso-costo" step="0.01" min="0">
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="edit-curso-parada-linea" style="width:auto;">
+        Implica parada de línea
+      </label>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
       <button class="btn btn-outline" onclick="cerrarModalCurso()">Cancelar</button>
@@ -1633,7 +1645,7 @@ async function cargarCursos() {
     const costo = (c.costo != null) ? '$' + Number(c.costo).toLocaleString('es-AR') : '—';
     return `<tr ${bg}>
       <td><span class="badge badge-gray">${c.codigo||'—'}</span></td>
-      <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}</td>
+      <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}${c.parada_linea ? ' <span class="badge badge-yellow" title="Implica parada de línea">⏸ parada</span>' : ''}</td>
       <td><span class="badge badge-blue">${c.tipo||'—'}</span></td>
       <td>${c.responsable||'—'}</td>
       <td>${c.duracion_horas||'—'} hs</td>
@@ -1658,14 +1670,16 @@ async function agregarCurso() {
   const horas = parseFloat(document.getElementById('c-horas').value) || null;
   const temario = document.getElementById('c-temario').value.trim();
   const costo = parseFloat(document.getElementById('c-costo').value) || 0;
+  const paradaLinea = document.getElementById('c-parada-linea').checked;
   if (!titulo) { toast('Completá el título.'); return; }
-  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario, costo });
+  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario, costo, parada_linea: paradaLinea });
   if (error) { toast('Error al guardar.'); return; }
   document.getElementById('c-titulo').value = '';
   document.getElementById('c-responsable').value = '';
   document.getElementById('c-horas').value = '';
   document.getElementById('c-temario').value = '';
   document.getElementById('c-costo').value = '';
+  document.getElementById('c-parada-linea').checked = false;
   auditar('crear','curso','Agregó la capacitación "'+titulo+'"');
   toast('Capacitación agregada.');
   cargarCursos();
@@ -1792,6 +1806,7 @@ async function editarCurso(id) {
   document.getElementById('edit-curso-horas').value = data.duracion_horas || '';
   document.getElementById('edit-curso-temario').value = data.temario || '';
   document.getElementById('edit-curso-costo').value = (data.costo != null) ? data.costo : '';
+  document.getElementById('edit-curso-parada-linea').checked = !!data.parada_linea;
   document.getElementById('modal-curso').classList.add('open');
 }
 
@@ -1810,7 +1825,8 @@ async function guardarCurso() {
     responsable: document.getElementById('edit-curso-responsable').value.trim(),
     duracion_horas: parseFloat(document.getElementById('edit-curso-horas').value) || null,
     temario: document.getElementById('edit-curso-temario').value.trim(),
-    costo: parseFloat(document.getElementById('edit-curso-costo').value) || 0
+    costo: parseFloat(document.getElementById('edit-curso-costo').value) || 0,
+    parada_linea: document.getElementById('edit-curso-parada-linea').checked
   }).eq('id', id);
   if (error) { toast('Error al guardar.'); return; }
   cerrarModalCurso();
@@ -1886,7 +1902,7 @@ async function cargarAvance() {
 
   // 1. Traer el plan del período
   let qPlan = sb.from('plan_capacitacion')
-    .select('*, capacitaciones(titulo, codigo)')
+    .select('*, capacitaciones(titulo, codigo, duracion_horas, parada_linea)')
     .eq('periodo', periodo);
   if (centroFiltro) qPlan = qPlan.eq('centro', centroFiltro);
   const { data: plan } = await qPlan;
@@ -2000,7 +2016,7 @@ async function cargarAvance() {
     'Pendiente':     'badge-gray',
     'No realizada':  'badge-red'
   };
-  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Jornadas</th><th>Horas</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Duración</th><th>Parada línea</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Jornadas</th><th>Horas</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
   filas.sort((a,b) => a.plan.mes - b.plan.mes).forEach(f => {
     const cls = estiloEstado[f.estadoDesvio] || 'badge-gray';
     const estado = `<span class="badge ${cls}">${f.estadoDesvio}</span>`;
@@ -2019,9 +2035,15 @@ async function cargarAvance() {
     const jornadasTxt = !f.dictada ? '—'
       : (f.jornadas > 1 ? `<span class="badge badge-blue">${f.jornadas} jornadas</span>` : '1');
     const horasTxt = f.dictada ? f.horasTotales.toFixed(1) + ' hs' : '—';
+    const duracionCurso = (f.plan.capacitaciones?.duracion_horas != null) ? f.plan.capacitaciones.duracion_horas + ' hs' : '—';
+    const paradaTxt = f.plan.capacitaciones?.parada_linea
+      ? '<span class="badge badge-yellow" title="Implica parada de línea">⏸ Sí</span>'
+      : '<span style="color:#bbb;">No</span>';
     html += `<tr>
       <td><span class="badge badge-gray">${f.plan.capacitaciones?.codigo || '—'}</span></td>
       <td style="font-weight:500;">${f.plan.capacitaciones?.titulo || '—'}</td>
+      <td>${duracionCurso}</td>
+      <td>${paradaTxt}</td>
       <td>${f.plan.centro}</td>
       <td>${MESES[f.plan.mes]}</td>
       <td>${estado}</td>
