@@ -202,6 +202,23 @@ body {
 </head>
 <body>
 
+<!-- ══ PANTALLA DE ACCESO ══ -->
+<div id="login-gate" style="position:fixed;inset:0;background:#1B4F8A;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:12px;padding:32px;width:100%;max-width:340px;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+    <div style="font-size:36px;text-align:center;margin-bottom:12px;">🔒</div>
+    <h2 style="font-size:18px;font-weight:700;text-align:center;margin-bottom:6px;">Registro de Capacitaciones</h2>
+    <p style="font-size:13px;color:#666;text-align:center;margin-bottom:20px;">Ingresá la contraseña para continuar</p>
+    <input type="password" id="gate-pass" placeholder="Contraseña"
+           style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:12px;"
+           onkeydown="if(event.key==='Enter') validarAcceso()">
+    <button onclick="validarAcceso()"
+            style="width:100%;padding:12px;background:#1B4F8A;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">
+      Ingresar
+    </button>
+    <div id="gate-error" style="color:#c0392b;font-size:13px;text-align:center;margin-top:10px;display:none;">Contraseña incorrecta</div>
+  </div>
+</div>
+
 <!-- HEADER -->
 <div class="header" id="app-header" style="display:none;">
   <div>
@@ -248,7 +265,6 @@ body {
         <option value="">Seleccioná el centro...</option>
         <option>Bella Vista</option>
         <option>San Rafael</option>
-        <option>Cafayate</option>
       </select>
     </div>
     <div class="form-row">
@@ -453,6 +469,30 @@ body {
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
+// ── ACCESO ──────────────────────────────────────────────
+// Para cambiar la contraseña, editá esta línea:
+const CLAVE_ACCESO = 'capacitaciones2026';
+// ────────────────────────────────────────────────────────
+
+function validarAcceso() {
+  const val = document.getElementById('gate-pass').value;
+  if (val === CLAVE_ACCESO) {
+    sessionStorage.setItem('acceso_ok', '1');
+    document.getElementById('login-gate').style.display = 'none';
+  } else {
+    document.getElementById('gate-error').style.display = 'block';
+    document.getElementById('gate-pass').value = '';
+  }
+}
+
+// Si ya ingresó la clave en esta sesión del navegador, no volver a pedirla
+if (sessionStorage.getItem('acceso_ok') === '1') {
+  document.addEventListener('DOMContentLoaded', () => {
+    const g = document.getElementById('login-gate');
+    if (g) g.style.display = 'none';
+  });
+}
+
 const SUPABASE_URL = 'https://hxdyobticojtiztkgpri.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4ZHlvYnRpY29qdGl6dGtncHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5OTQ4MTYsImV4cCI6MjA5ODU3MDgxNn0.5__ql02n2WMO_PWZlOHK8hmVVhhwL2K_cLEbNEH0-VQ';
 
@@ -1058,9 +1098,6 @@ function limpiarInst() {
 }
 
 async function cerrarSesion() {
-  const btnGenerar = event && event.target ? event.target : null;
-  if (btnGenerar) { btnGenerar.disabled = true; btnGenerar.textContent = 'Generando acta...'; }
-
   try {
     const firmaInst = padInst && !padInst.isEmpty() ? padInst.toDataURL('image/png') : null;
     const pdfBytes = await generarPDF(firmaInst);
@@ -1078,39 +1115,51 @@ async function cerrarSesion() {
     // 2) Subir el acta a la nube
     const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
     const { error: pdfErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
-    if (pdfErr) { toast('El acta se descargó, pero no se pudo subir a la nube: ' + pdfErr.message); }
+    if (pdfErr) { toast('El acta se descargó, pero no subió a la nube: ' + pdfErr.message); }
 
-    // 3) Si adjuntaron un registro externo (opcional, solo online), subirlo
+    // 3) Registro externo (opcional, solo online). Si falla, se sigue igual.
     let registroPath = null;
     const inputReg = document.getElementById('inp-registro');
     if (esOnline && inputReg && inputReg.files && inputReg.files.length) {
       const file = inputReg.files[0];
       const ext = file.name.split('.').pop();
-      registroPath = sesion.id + '/registro_' + Date.now() + '.' + ext;
-      const { error: regErr } = await sb.storage.from('registros').upload(registroPath, file, { contentType: file.type || 'application/octet-stream' });
-      if (regErr) { toast('El registro externo no se pudo subir, pero el acta sí se guardó.'); registroPath = null; }
+      const p = sesion.id + '/registro_' + Date.now() + '.' + ext;
+      const { error: regErr } = await sb.storage.from('registros').upload(p, file, { contentType: file.type || 'application/octet-stream' });
+      if (regErr) toast('El registro externo no se pudo subir; el acta sí se guardó.');
+      else registroPath = p;
     }
 
-    // 4) Marcar la sesión como cerrada
-    await sb.from('sesiones').update({
+    // 4) Marcar la sesión como CERRADA. Lo esencial: que quede cerrada sí o sí.
+    const datosCierre = {
       estado: 'cerrada',
       firma_instructor: firmaInst,
       cerrada_at: new Date().toISOString(),
       pdf_url: pdfErr ? null : pdfPath,
       pdf_hash: hashHex,
-      verificacion_eficacia: verificacionEficacia,
-      registro_url: registroPath
-    }).eq('id', sesion.id);
+      verificacion_eficacia: verificacionEficacia
+    };
+    if (registroPath) datosCierre.registro_url = registroPath;
+
+    let { error: updErr } = await sb.from('sesiones').update(datosCierre).eq('id', sesion.id);
+
+    // Si falló (ej: falta alguna columna), reintentar con lo mínimo para no dejarla abierta
+    if (updErr) {
+      const r2 = await sb.from('sesiones').update({
+        estado: 'cerrada',
+        cerrada_at: new Date().toISOString(),
+        pdf_url: pdfErr ? null : pdfPath
+      }).eq('id', sesion.id);
+      if (r2.error) { toast('No se pudo cerrar la sesión: ' + r2.error.message); return; }
+      toast('Sesión cerrada (algunos datos extra no se guardaron).');
+    }
 
     cerrarModal();
     document.getElementById('footer-bar').style.display = 'none';
     document.getElementById('app-header').style.display = 'none';
-    const totalAsist = esOnline ? (firmados.size) : firmados.size;
-    document.getElementById('cerrada-texto').textContent = sesion.capacitaciones.titulo + ' · ' + totalAsist + ' asistentes';
+    document.getElementById('cerrada-texto').textContent = sesion.capacitaciones.titulo + ' · ' + firmados.size + ' asistentes';
     mostrar('p-cerrada');
   } catch (err) {
-    toast('Error al finalizar: ' + err.message);
-    if (btnGenerar) { btnGenerar.disabled = false; btnGenerar.textContent = 'Generar PDF ✓'; }
+    toast('Error al finalizar: ' + (err.message || err));
   }
 }
 
