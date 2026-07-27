@@ -921,6 +921,28 @@ tr:hover td { background: #fafeff; }
   </div>
 </div>
 
+<!-- MODAL: ASISTENCIA MANUAL (corrección) -->
+<div class="overlay" id="modal-asistencia-manual">
+  <div class="modal">
+    <h3>Agregar asistencia manual</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:14px;">
+      Usalo para corregir casos donde alguien firmó bajo un registro equivocado (duplicado) que ya se borró,
+      o cualquier caso donde necesites marcar presente a alguien sin pasar por la firma en la tablet.
+    </p>
+    <input type="hidden" id="am-sesion-id">
+    <div class="form-group">
+      <label>Buscar empleado</label>
+      <input type="text" id="am-buscar" placeholder="Nombre o DNI..." oninput="filtrarAsistenciaManual(this.value)">
+    </div>
+    <div id="am-lista" style="max-height:260px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px;margin-bottom:10px;"></div>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;" id="am-seleccion">0 seleccionados</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button class="btn btn-outline" onclick="cerrarModalAsistenciaManual()">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarAsistenciaManual()">Agregar como presentes</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: CIERRE MANUAL DE SESIÓN -->
 <div class="overlay" id="modal-cierre-manual">
   <div class="modal">
@@ -1055,7 +1077,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -1225,6 +1247,7 @@ async function cargarSesiones() {
       <td>
         ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'abierta')">Cerrar y generar PDF</button>` : ''}
         ${s.estado === 'cerrada' && !s.pdf_url ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'cerrada')">Generar PDF faltante</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="abrirAsistenciaManual('${s.id}')">+ Asistencia</button>
         <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
         <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
       </td>
@@ -1387,6 +1410,10 @@ async function generarPDFManual(sesion, verif) {
         doc.setFontSize(8); doc.setTextColor(120);
         doc.text('Asistencia online', m + 92, y);
         doc.setFontSize(9); doc.setTextColor(0);
+      } else if (img === 'MANUAL') {
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text('Registrado manualmente', m + 92, y);
+        doc.setFontSize(9); doc.setTextColor(0);
       } else if (img && img.startsWith('data:')) {
         const comprimida = await comprimirFirma(img);
         doc.addImage(comprimida, 'JPEG', m + 92, y - 4, 48, 9);
@@ -1437,6 +1464,82 @@ function comprimirFirma(dataUrl) {
 async function sha256(buf) {
   const b = buf instanceof ArrayBuffer ? buf : await new Response(buf).arrayBuffer();
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', b))).map(x => x.toString(16).padStart(2,'0')).join('');
+}
+
+// ── ASISTENCIA MANUAL (corrección) ──
+let amEmpleadosTodos = [];
+let amSeleccionados = new Set();
+let amYaAsistieron = new Set();
+
+async function abrirAsistenciaManual(sesionId) {
+  if (!requiereEditor()) return;
+  document.getElementById('am-sesion-id').value = sesionId;
+  document.getElementById('am-buscar').value = '';
+  amSeleccionados = new Set();
+
+  const { data: emps } = await sb.from('empleados').select('id, legajo, nombre, sector, centro').eq('activo', true).order('nombre');
+  amEmpleadosTodos = emps || [];
+
+  const { data: asis } = await sb.from('asistencias').select('empleado_id').eq('sesion_id', sesionId).eq('anulada', false);
+  amYaAsistieron = new Set((asis || []).map(a => a.empleado_id));
+
+  renderAsistenciaManual('');
+  document.getElementById('modal-asistencia-manual').classList.add('open');
+}
+
+function cerrarModalAsistenciaManual() {
+  document.getElementById('modal-asistencia-manual').classList.remove('open');
+}
+
+function filtrarAsistenciaManual(q) { renderAsistenciaManual(q); }
+
+function renderAsistenciaManual(q) {
+  let arr = amEmpleadosTodos;
+  if (q) {
+    const ql = q.toLowerCase();
+    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+  }
+  const cont = document.getElementById('am-lista');
+  if (!arr.length) { cont.innerHTML = '<div style="padding:10px;color:#999;font-size:13px;">Sin resultados.</div>'; return; }
+  cont.innerHTML = arr.map(e => {
+    const yaAsistio = amYaAsistieron.has(e.id);
+    const sel = amSeleccionados.has(e.id);
+    if (yaAsistio) {
+      return `<div style="padding:8px;display:flex;justify-content:space-between;opacity:0.5;">
+        <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'}</span><span style="color:#1A6B3C;">✓ ya registrado</span>
+      </div>`;
+    }
+    return `<div onclick="toggleAsistenciaManual('${e.id}')" style="padding:8px;display:flex;justify-content:space-between;cursor:pointer;border-radius:6px;${sel?'background:#E6F4EC;':''}">
+      <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'} ${e.centro?('· '+e.centro):''}</span>
+      <span style="color:${sel?'#1A6B3C':'#ccc'};font-size:16px;">${sel?'☑':'☐'}</span>
+    </div>`;
+  }).join('');
+}
+
+function toggleAsistenciaManual(id) {
+  if (amSeleccionados.has(id)) amSeleccionados.delete(id); else amSeleccionados.add(id);
+  document.getElementById('am-seleccion').textContent = amSeleccionados.size + ' seleccionados';
+  renderAsistenciaManual(document.getElementById('am-buscar').value);
+}
+
+async function confirmarAsistenciaManual() {
+  const sesionId = document.getElementById('am-sesion-id').value;
+  if (!amSeleccionados.size) { toast('Seleccioná al menos un empleado.'); return; }
+
+  const registros = [...amSeleccionados].map(empId => ({
+    sesion_id: sesionId, empleado_id: empId, firma_url: 'MANUAL', firmado_at: new Date().toISOString()
+  }));
+  const { error: errA } = await sb.from('asistencias').insert(registros);
+  if (errA) { toast('Error al guardar: ' + errA.message); return; }
+
+  // También asegurar que queden como convocados (si no lo estaban)
+  const conv = [...amSeleccionados].map(empId => ({ sesion_id: sesionId, empleado_id: empId }));
+  await sb.from('convocados').upsert(conv, { onConflict: 'sesion_id,empleado_id' });
+
+  auditar('editar', 'sesion', 'Agregó asistencia manual de ' + amSeleccionados.size + ' persona(s) (corrección) en sesión ' + sesionId);
+  cerrarModalAsistenciaManual();
+  toast('Asistencia agregada. Los indicadores se van a actualizar.');
+  cargarSesiones();
 }
 
 async function abrirVincular(sesionId, capId, centro, madreActual) {
