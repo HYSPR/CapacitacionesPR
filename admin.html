@@ -924,26 +924,28 @@ tr:hover td { background: #fafeff; }
 <!-- MODAL: CIERRE MANUAL DE SESIÓN -->
 <div class="overlay" id="modal-cierre-manual">
   <div class="modal">
-    <h3>Cerrar sesión manualmente</h3>
-    <p style="font-size:13px;color:#666;margin-bottom:16px;">
+    <h3 id="cm-titulo">Cerrar sesión manualmente</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:16px;" id="cm-descripcion">
       Esta sesión quedó abierta. Vas a cerrarla ahora y generar su acta PDF con los asistentes ya registrados.
     </p>
     <input type="hidden" id="cm-sesion-id">
-    <div class="form-group">
-      <label>Verificación de eficacia *</label>
-      <select id="cm-verif" onchange="document.getElementById('cm-grupo-otro').style.display = this.value === 'otro' ? 'block' : 'none';">
-        <option value="">Seleccioná cómo se verificará...</option>
-        <option>Evaluación escrita</option>
-        <option>Evaluación oral</option>
-        <option>Observación en el puesto de trabajo</option>
-        <option>Auditoría interna</option>
-        <option>Seguimiento de indicadores</option>
-        <option value="otro">Otra forma...</option>
-      </select>
-    </div>
-    <div class="form-group" id="cm-grupo-otro" style="display:none;">
-      <label>Detalle</label>
-      <input type="text" id="cm-verif-otro" placeholder="Describí cómo se verificará la eficacia">
+    <div id="cm-campo-verif">
+      <div class="form-group">
+        <label>Verificación de eficacia *</label>
+        <select id="cm-verif" onchange="document.getElementById('cm-grupo-otro').style.display = this.value === 'otro' ? 'block' : 'none';">
+          <option value="">Seleccioná cómo se verificará...</option>
+          <option>Evaluación escrita</option>
+          <option>Evaluación oral</option>
+          <option>Observación en el puesto de trabajo</option>
+          <option>Auditoría interna</option>
+          <option>Seguimiento de indicadores</option>
+          <option value="otro">Otra forma...</option>
+        </select>
+      </div>
+      <div class="form-group" id="cm-grupo-otro" style="display:none;">
+        <label>Detalle</label>
+        <input type="text" id="cm-verif-otro" placeholder="Describí cómo se verificará la eficacia">
+      </div>
     </div>
     <p style="font-size:12px;color:#888;margin:4px 0 12px;">
       No se pide firma del instructor (la sesión se cierra de forma administrativa). El PDF queda aclarado como cierre manual.
@@ -1053,7 +1055,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -1221,7 +1223,8 @@ async function cargarSesiones() {
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
       <td>${pdf}${registro}</td>
       <td>
-        ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}')">Cerrar y generar PDF</button>` : ''}
+        ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'abierta')">Cerrar y generar PDF</button>` : ''}
+        ${s.estado === 'cerrada' && !s.pdf_url ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'cerrada')">Generar PDF faltante</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
         <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
       </td>
@@ -1229,13 +1232,24 @@ async function cargarSesiones() {
   }).join('');
 }
 
-// ── CIERRE MANUAL DE SESIONES ABIERTAS ──
-function abrirCierreManual(sesionId) {
+// ── CIERRE MANUAL DE SESIONES ABIERTAS / REINTENTO DE PDF FALTANTE ──
+function abrirCierreManual(sesionId, estadoActual) {
   if (!requiereEditor()) return;
+  const esReintento = estadoActual === 'cerrada';
   document.getElementById('cm-sesion-id').value = sesionId;
+  document.getElementById('modal-cierre-manual').dataset.reintento = esReintento ? '1' : '0';
   document.getElementById('cm-verif').value = '';
   document.getElementById('cm-verif-otro').value = '';
   document.getElementById('cm-grupo-otro').style.display = 'none';
+
+  document.getElementById('cm-titulo').textContent = esReintento
+    ? 'Generar / volver a subir el acta PDF'
+    : 'Cerrar sesión manualmente';
+  document.getElementById('cm-descripcion').textContent = esReintento
+    ? 'Esta sesión ya está cerrada pero el PDF no se subió a la nube. Se va a regenerar con los asistentes registrados y volver a intentar la subida.'
+    : 'Esta sesión quedó abierta. Vas a cerrarla ahora y generar su acta PDF con los asistentes ya registrados.';
+  document.getElementById('cm-campo-verif').style.display = esReintento ? 'none' : 'block';
+
   document.getElementById('modal-cierre-manual').classList.add('open');
 }
 
@@ -1245,10 +1259,15 @@ function cerrarModalCierreManual() {
 
 async function confirmarCierreManual() {
   const sesionId = document.getElementById('cm-sesion-id').value;
-  const sel = document.getElementById('cm-verif').value;
-  const otro = document.getElementById('cm-verif-otro').value.trim();
-  if (!sel || (sel === 'otro' && !otro)) { toast('Indicá cómo se verificará la eficacia.'); return; }
-  const verif = sel === 'otro' ? otro : sel;
+  const esReintento = document.getElementById('modal-cierre-manual').dataset.reintento === '1';
+
+  let verif = '';
+  if (!esReintento) {
+    const sel = document.getElementById('cm-verif').value;
+    const otro = document.getElementById('cm-verif-otro').value.trim();
+    if (!sel || (sel === 'otro' && !otro)) { toast('Indicá cómo se verificará la eficacia.'); return; }
+    verif = sel === 'otro' ? otro : sel;
+  }
 
   const btn = document.getElementById('cm-btn-confirmar');
   btn.disabled = true; btn.textContent = 'Generando...';
@@ -1259,7 +1278,8 @@ async function confirmarCierreManual() {
       .eq('id', sesionId).single();
     if (errSes || !sesion) throw new Error('No se encontró la sesión.');
 
-    const pdfBytes = await generarPDFManual(sesion, verif);
+    const verifParaPdf = esReintento ? (sesion.verificacion_eficacia || '-') : verif;
+    const pdfBytes = await generarPDFManual(sesion, verifParaPdf);
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
     const hashHex = await sha256(pdfBytes);
 
@@ -1273,23 +1293,32 @@ async function confirmarCierreManual() {
 
     const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
     const { error: upErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
-    if (upErr) toast('El PDF se generó pero no se pudo subir a la nube: ' + upErr.message);
 
-    const { error: updErr } = await sb.from('sesiones').update({
-      estado: 'cerrada',
-      cerrada_at: new Date().toISOString(),
-      pdf_url: upErr ? null : pdfPath,
-      pdf_hash: hashHex,
-      verificacion_eficacia: verif
-    }).eq('id', sesionId);
+    const datosUpdate = { pdf_url: upErr ? null : pdfPath, pdf_hash: hashHex };
+    if (!esReintento) {
+      datosUpdate.estado = 'cerrada';
+      datosUpdate.cerrada_at = new Date().toISOString();
+      datosUpdate.verificacion_eficacia = verif;
+    }
+    const { error: updErr } = await sb.from('sesiones').update(datosUpdate).eq('id', sesionId);
     if (updErr) throw new Error(updErr.message);
 
-    auditar('editar', 'sesion', 'Cierre manual de sesión (id ' + sesionId + ') desde el admin');
+    if (upErr) {
+      // No cerramos el modal ni tapamos el error con un mensaje de éxito.
+      // El usuario puede tocar "Generar PDF" de nuevo para reintentar.
+      toast('El PDF se descargó a tu computadora, pero no se pudo subir a la nube: ' + upErr.message);
+      btn.disabled = false; btn.textContent = esReintento ? 'Generar PDF' : 'Cerrar y generar PDF';
+      return;
+    }
+
+    auditar('editar', 'sesion', (esReintento ? 'Reintento de subida de PDF' : 'Cierre manual de sesión') + ' (id ' + sesionId + ') desde el admin');
     cerrarModalCierreManual();
-    toast('Sesión cerrada y acta generada.');
+    toast(esReintento ? 'PDF generado y subido correctamente.' : 'Sesión cerrada y acta generada.');
     cargarSesiones();
   } catch (err) {
     toast('Error: ' + (err.message || err));
+    btn.disabled = false; btn.textContent = esReintento ? 'Generar PDF' : 'Cerrar y generar PDF';
+    return;
   }
   btn.disabled = false; btn.textContent = 'Cerrar y generar PDF';
 }
