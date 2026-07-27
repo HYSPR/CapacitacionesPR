@@ -402,10 +402,10 @@ tr:hover td { background: #fafeff; }
           <label>Mes</label>
           <select id="ses-mes" onchange="cargarSesiones()">
             <option value="">Todos los meses</option>
-            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
-            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
             <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
             <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
           </select>
         </div>
         <div class="filter-group">
@@ -2332,10 +2332,14 @@ async function cargarPlan() {
   const periodo = parseInt(document.getElementById('pl-filtro-periodo').value) || periodoActual();
   const { data } = await sb.from('plan_capacitacion')
     .select('*, capacitaciones(titulo, codigo)')
-    .eq('periodo', periodo).order('mes');
+    .eq('periodo', periodo);
 
   const tbody = document.getElementById('body-plan');
   if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin planificaciones para este período.</td></tr>'; return; }
+
+  // Orden fiscal: julio primero, junio último
+  const ordenFiscalMes = (mes) => mes >= 7 ? mes - 7 : mes + 5;
+  data.sort((a, b) => ordenFiscalMes(a.mes) - ordenFiscalMes(b.mes));
 
   tbody.innerHTML = data.map(p => `<tr>
     <td><span class="badge badge-gray">${p.capacitaciones?.codigo || '—'}</span></td>
@@ -2477,7 +2481,9 @@ async function cargarAvance() {
     'No realizada':  'badge-red'
   };
   let html = '<table><thead><tr><th>Código</th><th>Capacitación</th><th>Duración</th><th>Parada línea</th><th>Centro</th><th>Mes plan</th><th>Estado</th><th>Jornadas</th><th>Horas</th><th>Asist./convoc.</th><th>Ausentes</th><th>Justificación</th></tr></thead><tbody>';
-  filas.sort((a,b) => a.plan.mes - b.plan.mes).forEach(f => {
+  // Orden fiscal: julio primero, junio último (no el orden numérico 1-12)
+  const ordenFiscalMes = (mes) => mes >= 7 ? mes - 7 : mes + 5;
+  filas.sort((a,b) => ordenFiscalMes(a.plan.mes) - ordenFiscalMes(b.plan.mes)).forEach(f => {
     const cls = estiloEstado[f.estadoDesvio] || 'badge-gray';
     const estado = `<span class="badge ${cls}">${f.estadoDesvio}</span>`;
     const ausentesTxt = f.dictada && f.ausentes.length
@@ -2799,7 +2805,7 @@ async function cargarTablero() {
   // ── TABLA: capacitaciones con desvío ──
   const estiloD = { 'Adelantada':'badge-blue', 'Atrasada':'badge-yellow', 'No realizada':'badge-red' };
   document.getElementById('tb-desvios').innerHTML = desvios.length
-    ? desvios.sort((a,b)=>a.p.mes-b.p.mes).map(d => `<tr>
+    ? desvios.sort((a,b)=> ((a.p.mes>=7?a.p.mes-7:a.p.mes+5)) - ((b.p.mes>=7?b.p.mes-7:b.p.mes+5)) ).map(d => `<tr>
         <td style="font-weight:500;">${d.p.capacitaciones?.titulo || '—'}</td>
         <td>${d.p.centro}</td>
         <td>${MESES[d.p.mes]}</td>
