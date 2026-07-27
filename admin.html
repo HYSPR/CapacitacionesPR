@@ -1388,11 +1388,13 @@ async function generarPDFManual(sesion, verif) {
         doc.text('Asistencia online', m + 92, y);
         doc.setFontSize(9); doc.setTextColor(0);
       } else if (img && img.startsWith('data:')) {
-        doc.addImage(img, 'PNG', m + 92, y - 4, 48, 9);
+        const comprimida = await comprimirFirma(img);
+        doc.addImage(comprimida, 'JPEG', m + 92, y - 4, 48, 9);
       } else if (img) {
         const { data: b } = await sb.storage.from('firmas').download(img);
         const dataUrl = await blobToDataURL(b);
-        doc.addImage(dataUrl, 'PNG', m + 92, y - 4, 48, 9);
+        const comprimida = await comprimirFirma(dataUrl);
+        doc.addImage(comprimida, 'JPEG', m + 92, y - 4, 48, 9);
       }
     } catch (_) {}
     doc.text(a.firmado_at ? new Date(a.firmado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '-', m + 153, y);
@@ -1411,6 +1413,27 @@ async function generarPDFManual(sesion, verif) {
 }
 
 function blobToDataURL(b) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); }); }
+
+// Redimensiona y comprime una imagen de firma antes de incrustarla al PDF,
+// para que actas con muchos asistentes no superen el límite de tamaño del bucket.
+function comprimirFirma(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 300, maxH = 120;
+      const canvas = document.createElement('canvas');
+      canvas.width = maxW; canvas.height = maxH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, maxW, maxH);
+      const ratio = Math.min(maxW / img.width, maxH / img.height);
+      const w = img.width * ratio, h = img.height * ratio;
+      ctx.drawImage(img, (maxW - w) / 2, (maxH - h) / 2, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.55));
+    };
+    img.onerror = () => resolve(dataUrl); // si falla, usar la original
+    img.src = dataUrl;
+  });
+}
 async function sha256(buf) {
   const b = buf instanceof ArrayBuffer ? buf : await new Response(buf).arrayBuffer();
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', b))).map(x => x.toString(16).padStart(2,'0')).join('');
