@@ -1227,6 +1227,10 @@ async function generarPDF(firmaInstructor) {
         doc.setFontSize(8); doc.setTextColor(120);
         doc.text('Asistencia online', m + 92, y);
         doc.setFontSize(9); doc.setTextColor(0);
+      } else if (img === 'MANUAL') {
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text('Registrado manualmente', m + 92, y);
+        doc.setFontSize(9); doc.setTextColor(0);
       } else {
         if (!img.startsWith('data:')) {
           const { data: b } = await sb.storage.from('firmas').download(a.firma_url);
