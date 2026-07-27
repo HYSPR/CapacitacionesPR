@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Administración · Capacitaciones</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -920,6 +921,40 @@ tr:hover td { background: #fafeff; }
   </div>
 </div>
 
+<!-- MODAL: CIERRE MANUAL DE SESIÓN -->
+<div class="overlay" id="modal-cierre-manual">
+  <div class="modal">
+    <h3>Cerrar sesión manualmente</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:16px;">
+      Esta sesión quedó abierta. Vas a cerrarla ahora y generar su acta PDF con los asistentes ya registrados.
+    </p>
+    <input type="hidden" id="cm-sesion-id">
+    <div class="form-group">
+      <label>Verificación de eficacia *</label>
+      <select id="cm-verif" onchange="document.getElementById('cm-grupo-otro').style.display = this.value === 'otro' ? 'block' : 'none';">
+        <option value="">Seleccioná cómo se verificará...</option>
+        <option>Evaluación escrita</option>
+        <option>Evaluación oral</option>
+        <option>Observación en el puesto de trabajo</option>
+        <option>Auditoría interna</option>
+        <option>Seguimiento de indicadores</option>
+        <option value="otro">Otra forma...</option>
+      </select>
+    </div>
+    <div class="form-group" id="cm-grupo-otro" style="display:none;">
+      <label>Detalle</label>
+      <input type="text" id="cm-verif-otro" placeholder="Describí cómo se verificará la eficacia">
+    </div>
+    <p style="font-size:12px;color:#888;margin:4px 0 12px;">
+      No se pide firma del instructor (la sesión se cierra de forma administrativa). El PDF queda aclarado como cierre manual.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+      <button class="btn btn-outline" onclick="cerrarModalCierreManual()">Cancelar</button>
+      <button class="btn btn-success" id="cm-btn-confirmar" onclick="confirmarCierreManual()">Cerrar y generar PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: VINCULAR SESIONES -->
 <div class="overlay" id="modal-vincular">
   <div class="modal">
@@ -1018,7 +1053,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -1186,11 +1221,170 @@ async function cargarSesiones() {
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
       <td>${pdf}${registro}</td>
       <td>
+        ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}')">Cerrar y generar PDF</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
         <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+// ── CIERRE MANUAL DE SESIONES ABIERTAS ──
+function abrirCierreManual(sesionId) {
+  if (!requiereEditor()) return;
+  document.getElementById('cm-sesion-id').value = sesionId;
+  document.getElementById('cm-verif').value = '';
+  document.getElementById('cm-verif-otro').value = '';
+  document.getElementById('cm-grupo-otro').style.display = 'none';
+  document.getElementById('modal-cierre-manual').classList.add('open');
+}
+
+function cerrarModalCierreManual() {
+  document.getElementById('modal-cierre-manual').classList.remove('open');
+}
+
+async function confirmarCierreManual() {
+  const sesionId = document.getElementById('cm-sesion-id').value;
+  const sel = document.getElementById('cm-verif').value;
+  const otro = document.getElementById('cm-verif-otro').value.trim();
+  if (!sel || (sel === 'otro' && !otro)) { toast('Indicá cómo se verificará la eficacia.'); return; }
+  const verif = sel === 'otro' ? otro : sel;
+
+  const btn = document.getElementById('cm-btn-confirmar');
+  btn.disabled = true; btn.textContent = 'Generando...';
+
+  try {
+    const { data: sesion, error: errSes } = await sb.from('sesiones')
+      .select('*, capacitaciones(titulo, codigo, responsable, duracion_horas)')
+      .eq('id', sesionId).single();
+    if (errSes || !sesion) throw new Error('No se encontró la sesión.');
+
+    const pdfBytes = await generarPDFManual(sesion, verif);
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const hashHex = await sha256(pdfBytes);
+
+    // Descargar una copia local también, por las dudas
+    const urlDesc = URL.createObjectURL(pdfBlob);
+    const aDesc = document.createElement('a');
+    aDesc.href = urlDesc;
+    aDesc.download = 'Acta_' + sesion.capacitaciones.titulo.replace(/\s+/g, '_') + '_' + sesion.fecha + '.pdf';
+    aDesc.click();
+    URL.revokeObjectURL(urlDesc);
+
+    const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
+    const { error: upErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
+    if (upErr) toast('El PDF se generó pero no se pudo subir a la nube: ' + upErr.message);
+
+    const { error: updErr } = await sb.from('sesiones').update({
+      estado: 'cerrada',
+      cerrada_at: new Date().toISOString(),
+      pdf_url: upErr ? null : pdfPath,
+      pdf_hash: hashHex,
+      verificacion_eficacia: verif
+    }).eq('id', sesionId);
+    if (updErr) throw new Error(updErr.message);
+
+    auditar('editar', 'sesion', 'Cierre manual de sesión (id ' + sesionId + ') desde el admin');
+    cerrarModalCierreManual();
+    toast('Sesión cerrada y acta generada.');
+    cargarSesiones();
+  } catch (err) {
+    toast('Error: ' + (err.message || err));
+  }
+  btn.disabled = false; btn.textContent = 'Cerrar y generar PDF';
+}
+
+// Genera el acta PDF para un cierre manual (sin firma de instructor)
+async function generarPDFManual(sesion, verif) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const m = 20;
+
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+  doc.text('Registro de Asistencia a Capacitacion', m, 25);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
+  doc.text('REG-CAP-' + new Date().getFullYear() + '-' + String(sesion.numero_registro || '').padStart(4, '0'), 210 - m, 25, { align: 'right' });
+  doc.setTextColor(0);
+  doc.setDrawColor(220); doc.line(m, 28, 210 - m, 28);
+
+  const cap = sesion.capacitaciones;
+  let y = 36;
+  [
+    ['Codigo',       cap.codigo || '-'],
+    ['Capacitacion', cap.titulo],
+    ['Centro',       sesion.centro || (sesion.modalidad === 'online' ? 'Todas (online)' : '-')],
+    ['Fecha y lugar', formatFecha(sesion.fecha) + ' - ' + (sesion.lugar || '-')],
+    ['Instructor',   sesion.instructor || '-'],
+    ['Responsable',  cap.responsable || '-'],
+    ['Duracion',     (cap.duracion_horas || '-') + ' hs'],
+    ['Verif. eficacia', verif || '-']
+  ].forEach(([k, v]) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(k, m, y);
+    doc.setFont('helvetica', 'normal');
+    const lineas = doc.splitTextToSize(String(v), 130);
+    doc.text(lineas, m + 35, y); y += 7 * lineas.length;
+  });
+
+  y += 4;
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+  doc.setFillColor(245, 245, 242); doc.rect(m, y - 4, 170, 7, 'F');
+  doc.text('Legajo', m + 2, y);
+  doc.text('Nombre y sector', m + 22, y);
+  doc.text('Firma', m + 95, y);
+  doc.text('Hora', m + 153, y);
+  doc.line(m, y + 2, 210 - m, y + 2);
+  y += 7;
+
+  const { data: asiData } = await sb.from('asistencias')
+    .select('*, empleados(legajo, nombre, sector)')
+    .eq('sesion_id', sesion.id).eq('anulada', false).order('firmado_at');
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  for (const a of asiData || []) {
+    if (y > 258) { doc.addPage(); y = 25; }
+    doc.text(a.empleados?.legajo || '-', m + 2, y);
+    doc.setFontSize(9); doc.setTextColor(0);
+    const nombre = doc.splitTextToSize(a.empleados?.nombre || '-', 62)[0];
+    doc.text(nombre, m + 22, y);
+    if (a.empleados?.sector) {
+      doc.setFontSize(7); doc.setTextColor(120);
+      const sector = doc.splitTextToSize(a.empleados.sector, 62)[0];
+      doc.text(sector, m + 22, y + 3.5);
+      doc.setFontSize(9); doc.setTextColor(0);
+    }
+    try {
+      let img = a.firma_url;
+      if (img === 'ONLINE') {
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text('Asistencia online', m + 92, y);
+        doc.setFontSize(9); doc.setTextColor(0);
+      } else if (img && img.startsWith('data:')) {
+        doc.addImage(img, 'PNG', m + 92, y - 4, 48, 9);
+      } else if (img) {
+        const { data: b } = await sb.storage.from('firmas').download(img);
+        const dataUrl = await blobToDataURL(b);
+        doc.addImage(dataUrl, 'PNG', m + 92, y - 4, 48, 9);
+      }
+    } catch (_) {}
+    doc.text(a.firmado_at ? new Date(a.firmado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '-', m + 153, y);
+    doc.setDrawColor(235); doc.line(m, y + 6, 210 - m, y + 6);
+    y += 13;
+  }
+
+  y += 6;
+  doc.setFontSize(8); doc.setTextColor(150);
+  doc.text('Cierre administrativo — la sesión fue cerrada manualmente desde el panel de administración.', m, y + 5);
+  const hash = await sha256(doc.output('arraybuffer'));
+  doc.text('Cerrado: ' + new Date().toLocaleString('es-AR'), 210 - m, y + 12, { align: 'right' });
+  doc.text('SHA-256: ' + hash.slice(0, 8) + '...' + hash.slice(-4), 210 - m, y + 17, { align: 'right' });
+
+  return doc.output('arraybuffer');
+}
+
+function blobToDataURL(b) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); }); }
+async function sha256(buf) {
+  const b = buf instanceof ArrayBuffer ? buf : await new Response(buf).arrayBuffer();
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', b))).map(x => x.toString(16).padStart(2,'0')).join('');
 }
 
 async function abrirVincular(sesionId, capId, centro, madreActual) {
