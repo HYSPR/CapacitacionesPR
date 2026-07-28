@@ -2384,7 +2384,7 @@ async function cargarAvance() {
   const desde = periodo + '-07-01';
   const hasta = (periodo + 1) + '-06-30';
   let qSes = sb.from('sesiones')
-    .select('id, capacitacion_id, centro, fecha, sesion_madre_id, capacitaciones(duracion_horas)')
+    .select('id, capacitacion_id, centro, fecha, sesion_madre_id, modalidad, capacitaciones(duracion_horas)')
     .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
   const { data: sesiones } = await qSes;
 
@@ -2408,9 +2408,10 @@ async function cargarAvance() {
   const anioActualCal = hoy.getFullYear();
 
   const filas = plan.map(p => {
-    // Sesiones que corresponden a este curso+centro
+    // Sesiones que corresponden a este curso+centro.
+    // Las online no tienen centro (son multi-planta): cumplen el plan de cualquier centro.
     const sesDelPlan = (sesiones || []).filter(s =>
-      s.capacitacion_id === p.capacitacion_id && s.centro === p.centro);
+      s.capacitacion_id === p.capacitacion_id && (s.centro === p.centro || s.modalidad === 'online'));
     const dictada = sesDelPlan.length > 0;
     if (dictada) realizadas++;
 
@@ -2657,7 +2658,8 @@ async function cargarTablero() {
   let qSes = sb.from('sesiones')
     .select('*, capacitaciones(id, titulo, tipo, duracion_horas, costo, parada_linea)')
     .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
-  if (centroF) qSes = qSes.eq('centro', centroF);
+  // Al filtrar por centro se incluyen también las online (no tienen centro y valen para todos)
+  if (centroF) qSes = qSes.or('centro.eq."' + centroF + '",modalidad.eq.online');
   const { data: sesRaw } = await qSes;
 
   let sesiones = sesRaw || [];
@@ -2693,7 +2695,8 @@ async function cargarTablero() {
   const mesActualCal = hoy.getMonth() + 1, anioActualCal = hoy.getFullYear();
   const desvios = [];
   plan.forEach(p => {
-    const sesDelPlan = sesiones.filter(s => s.capacitacion_id === p.capacitacion_id && s.centro === p.centro);
+    // Las online no tienen centro (son multi-planta): cumplen el plan de cualquier centro.
+    const sesDelPlan = sesiones.filter(s => s.capacitacion_id === p.capacitacion_id && (s.centro === p.centro || s.modalidad === 'online'));
     if (sesDelPlan.length) {
       realizadas++;
       const mesDictado = parseInt(sesDelPlan.sort((a,b)=>a.fecha<b.fecha?-1:1)[0].fecha.slice(5,7));
