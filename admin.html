@@ -1067,6 +1067,12 @@ function aplicarPermisos() {
 
   if (!esConsulta) return;
 
+  // Estas pestañas son de gestión pura: no aportan nada a quien solo consulta
+  const pestañasAOcultar = ['Plan', 'Empleados', 'Cursos'];
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (pestañasAOcultar.includes(t.textContent.trim())) t.style.display = 'none';
+  });
+
   // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
   const titulosAOcultar = ['Planificar capacitación', 'Carga masiva desde Excel',
     'Agregar empleado individual', 'Agregar capacitación individual'];
