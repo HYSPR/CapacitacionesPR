@@ -127,6 +127,8 @@ tr:hover td { background: #fafeff; }
 .badge-red { background: #FDECEC; color: #c0392b; }
 /* Modo consulta: ocultar formularios de alta y botones de acción */
 #usuario-header { font-size: 12px; color: rgba(255,255,255,0.85); }
+/* Los costos solo los ven los editores */
+body.sin-costos .col-costo { display: none !important; }
 
 /* ── TABLERO ── */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -318,7 +320,7 @@ tr:hover td { background: #fafeff; }
       <div class="kpi"><div class="kpi-label">Horas dictadas</div><div class="kpi-value" id="k-horas">—</div><div class="kpi-sub" id="k-horas-sub"></div></div>
       <div class="kpi"><div class="kpi-label">Personas capacitadas</div><div class="kpi-value" id="k-personas">—</div><div class="kpi-sub">únicas en el período</div></div>
       <div class="kpi"><div class="kpi-label">Asistencia</div><div class="kpi-value" id="k-asistencia">—</div><div class="kpi-sub" id="k-asistencia-sub"></div></div>
-      <div class="kpi"><div class="kpi-label">Costo total</div><div class="kpi-value" id="k-costo">—</div><div class="kpi-sub" id="k-costo-sub"></div></div>
+      <div class="kpi col-costo"><div class="kpi-label">Costo total</div><div class="kpi-value" id="k-costo">—</div><div class="kpi-sub" id="k-costo-sub"></div></div>
     </div>
 
     <!-- Gráficos -->
@@ -433,7 +435,7 @@ tr:hover td { background: #fafeff; }
               <th onclick="sort('tbl-sesiones',4)">Instructor ↕</th>
               <th>Lugar</th>
               <th onclick="sort('tbl-sesiones',6)">Asistentes ↕</th>
-              <th>Costo/pers.</th>
+              <th class="col-costo">Costo/pers.</th>
               <th>Estado</th>
               <th>PDF</th>
               <th>Acción</th>
@@ -790,7 +792,7 @@ tr:hover td { background: #fafeff; }
       </div>
       <div class="table-wrap">
         <table id="tbl-cursos">
-          <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th>Costo</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Código</th><th>Título</th><th>Tipo</th><th>Responsable</th><th>Horas</th><th class="col-costo">Costo</th><th>Acción</th></tr></thead>
           <tbody id="body-cursos"><tr class="empty-row"><td colspan="6">Cargando...</td></tr></tbody>
         </table>
       </div>
@@ -1060,6 +1062,9 @@ function aplicarPermisos() {
   const cont = document.getElementById('usuario-header');
   if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' · solo consulta' : ' · editor');
 
+  // Los costos (columnas y KPI) solo se muestran a editores
+  document.body.classList.toggle('sin-costos', esConsulta);
+
   if (!esConsulta) return;
 
   // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
@@ -1241,7 +1246,7 @@ async function cargarSesiones() {
       <td>${s.instructor || '—'}</td>
       <td>${s.lugar || '—'}</td>
       <td style="font-weight:600;">${n}</td>
-      <td>${costoPP}</td>
+      <td class="col-costo">${costoPP}</td>
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
       <td>${pdf}${registro}</td>
       <td>
@@ -2109,7 +2114,7 @@ async function cargarCursos() {
       <td><span class="badge badge-blue">${c.tipo||'—'}</span></td>
       <td>${c.responsable||'—'}</td>
       <td>${c.duracion_horas||'—'} hs</td>
-      <td>${costo}</td>
+      <td class="col-costo">${costo}</td>
       <td>${acciones}</td>
     </tr>`;
   }).join('');
