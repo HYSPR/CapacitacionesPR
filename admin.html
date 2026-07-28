@@ -2394,7 +2394,7 @@ async function cargarAvance() {
   let convocados = [];
   if (sesIds.length) {
     const { data: asi } = await sb.from('asistencias')
-      .select('sesion_id, empleado_id').in('sesion_id', sesIds).eq('anulada', false);
+      .select('sesion_id, empleado_id, empleados(centro)').in('sesion_id', sesIds).eq('anulada', false);
     asistencias = asi || [];
     const { data: conv } = await sb.from('convocados')
       .select('sesion_id, empleado_id, empleados(id, legajo, nombre, sector)').in('sesion_id', sesIds);
@@ -2402,6 +2402,15 @@ async function cargarAvance() {
   }
 
   // 4. Cruzar plan vs realizado
+  // Para las online: qué centros cubrieron, según el centro de quienes asistieron
+  const centrosPorSesion = {};
+  asistencias.forEach(a => {
+    const c = a.empleados?.centro;
+    if (!c) return;
+    if (!centrosPorSesion[a.sesion_id]) centrosPorSesion[a.sesion_id] = new Set();
+    centrosPorSesion[a.sesion_id].add(c);
+  });
+
   let realizadas = 0;
   const hoy = new Date();
   const mesActualCal = hoy.getMonth() + 1;    // mes calendario actual (1-12)
@@ -2409,9 +2418,15 @@ async function cargarAvance() {
 
   const filas = plan.map(p => {
     // Sesiones que corresponden a este curso+centro.
-    // Las online no tienen centro (son multi-planta): cumplen el plan de cualquier centro.
-    const sesDelPlan = (sesiones || []).filter(s =>
-      s.capacitacion_id === p.capacitacion_id && (s.centro === p.centro || s.modalidad === 'online'));
+    // Las online no tienen centro: cubren los centros de la gente que asistió.
+    const sesDelPlan = (sesiones || []).filter(s => {
+      if (s.capacitacion_id !== p.capacitacion_id) return false;
+      if (s.modalidad === 'online') {
+        const cs = centrosPorSesion[s.id];
+        return !!(cs && cs.has(p.centro));
+      }
+      return s.centro === p.centro;
+    });
     const dictada = sesDelPlan.length > 0;
     if (dictada) realizadas++;
 
@@ -2672,11 +2687,29 @@ async function cargarTablero() {
   let asistencias = [], convocados = [];
   if (sesIds.length) {
     const { data: a } = await sb.from('asistencias')
-      .select('sesion_id, empleado_id, empleados(sector, activo)').in('sesion_id', sesIds).eq('anulada', false);
+      .select('sesion_id, empleado_id, empleados(sector, activo, centro)').in('sesion_id', sesIds).eq('anulada', false);
     asistencias = a || [];
     const { data: c } = await sb.from('convocados')
       .select('sesion_id, empleado_id, empleados(sector, activo)').in('sesion_id', sesIds);
     convocados = c || [];
+  }
+
+  // Para las online: qué centros cubrieron, según el centro de quienes asistieron
+  const centrosPorSesion = {};
+  asistencias.forEach(a => {
+    const c = a.empleados?.centro;
+    if (!c) return;
+    if (!centrosPorSesion[a.sesion_id]) centrosPorSesion[a.sesion_id] = new Set();
+    centrosPorSesion[a.sesion_id].add(c);
+  });
+
+  // Si se filtró por centro, las online valen solo si asistió alguien de ese centro
+  if (centroF) {
+    sesiones = sesiones.filter(s => s.modalidad !== 'online'
+      || (centrosPorSesion[s.id] && centrosPorSesion[s.id].has(centroF)));
+    const idsOk = new Set(sesiones.map(s => s.id));
+    asistencias = asistencias.filter(a => idsOk.has(a.sesion_id));
+    convocados = convocados.filter(c => idsOk.has(c.sesion_id));
   }
 
   // 3. Plan del período (para cumplimiento y desvíos)
@@ -2695,8 +2728,15 @@ async function cargarTablero() {
   const mesActualCal = hoy.getMonth() + 1, anioActualCal = hoy.getFullYear();
   const desvios = [];
   plan.forEach(p => {
-    // Las online no tienen centro (son multi-planta): cumplen el plan de cualquier centro.
-    const sesDelPlan = sesiones.filter(s => s.capacitacion_id === p.capacitacion_id && (s.centro === p.centro || s.modalidad === 'online'));
+    // Las online no tienen centro: cubren los centros de la gente que asistió.
+    const sesDelPlan = sesiones.filter(s => {
+      if (s.capacitacion_id !== p.capacitacion_id) return false;
+      if (s.modalidad === 'online') {
+        const cs = centrosPorSesion[s.id];
+        return !!(cs && cs.has(p.centro));
+      }
+      return s.centro === p.centro;
+    });
     if (sesDelPlan.length) {
       realizadas++;
       const mesDictado = parseInt(sesDelPlan.sort((a,b)=>a.fecha<b.fecha?-1:1)[0].fecha.slice(5,7));
