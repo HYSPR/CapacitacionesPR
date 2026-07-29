@@ -304,7 +304,7 @@ body {
 <div id="p-buscar" class="container pb" style="display:none;">
   <div class="search-box">
     <span>🔍</span>
-    <input type="text" id="inp-buscar" placeholder="Buscar por nombre o DNI..."
+    <input type="text" id="inp-buscar" placeholder="Buscar por nombre..."
            oninput="filtrar()" autocomplete="off">
   </div>
   <div class="emp-list" id="lista-emp"></div>
@@ -726,17 +726,17 @@ function renderLista(q) {
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
 
   // "Activo" = ya cuenta como asistencia (marcado en online / firmado en presencial).
-  // Los activos suben al tope para verlos juntos.
   const estaActivo = (e) => esOnline
     ? (presentesOnline.has(e.id) || firmados.has(e.id) || yaAsistieronAntes.has(e.id))
     : (firmados.has(e.id) || yaAsistieronAntes.has(e.id));
 
-  const arriba = arr.filter(estaActivo);
-  const abajo = arr.filter(e => !estaActivo(e));
-
   const sep = (texto) => `<div style="font-size:12px;font-weight:600;color:#888;margin:6px 2px 4px;">${texto}</div>`;
 
   if (esOnline) {
+    const activos = arr.filter(estaActivo);
+    const convPendientes = arr.filter(e => !estaActivo(e) && convocados.has(e.id));
+    const noConvocados = arr.filter(e => !estaActivo(e) && !convocados.has(e.id));
+
     const renderItem = (e) => {
       const firmado = firmados.has(e.id);
       const asistioAntes = yaAsistieronAntes.has(e.id) && !firmado;
@@ -762,11 +762,16 @@ function renderLista(q) {
       </div>`;
     };
     let html = '';
-    if (arriba.length) html += sep('Seleccionados (' + arriba.length + ')') + arriba.map(renderItem).join('');
-    if (abajo.length) html += (arriba.length ? sep('Resto') : '') + abajo.map(renderItem).join('');
+    if (activos.length) html += sep('Seleccionados (' + activos.length + ')') + activos.map(renderItem).join('');
+    if (convPendientes.length) html += sep('Convocados pendientes (' + convPendientes.length + ')') + convPendientes.map(renderItem).join('');
+    if (noConvocados.length) html += sep('No convocados') + noConvocados.map(renderItem).join('');
     lista.innerHTML = html;
     return;
   }
+
+  const firmaron = arr.filter(estaActivo);
+  const convPendientes = arr.filter(e => !estaActivo(e) && convocados.has(e.id));
+  const noConvocados = arr.filter(e => !estaActivo(e) && !convocados.has(e.id));
 
   const renderItem = (e) => {
     const firmado = firmados.has(e.id);
@@ -782,8 +787,9 @@ function renderLista(q) {
     </div>`;
   };
   let html = '';
-  if (arriba.length) html += sep('Ya firmaron (' + arriba.length + ')') + arriba.map(renderItem).join('');
-  if (abajo.length) html += (arriba.length ? sep('Pendientes') : '') + abajo.map(renderItem).join('');
+  if (firmaron.length) html += sep('Ya firmaron (' + firmaron.length + ')') + firmaron.map(renderItem).join('');
+  if (convPendientes.length) html += sep('Convocados pendientes (' + convPendientes.length + ')') + convPendientes.map(renderItem).join('');
+  if (noConvocados.length) html += sep('No convocados') + noConvocados.map(renderItem).join('');
   lista.innerHTML = html;
 }
 
@@ -931,7 +937,8 @@ async function confirmar() {
 function actualizarContador() {
   const f = firmados.size;
   const c = convocados.size;
-  document.getElementById('h-counter').textContent = f + ' firmaron · ' + c + ' convocados';
+  const faltan = Math.max(c - f, 0);
+  document.getElementById('h-counter').textContent = f + ' firmaron · ' + c + ' convocados' + (c ? ' · faltan ' + faltan : '');
   document.getElementById('f-firmaron').textContent = f;
   document.getElementById('f-convocados').textContent = c;
 }
