@@ -215,10 +215,54 @@ body.sin-costos .col-costo { display: none !important; }
 .divider { height: 1px; background: #f0f0f0; margin: 16px 0; }
 .section-label { font-size: 11px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
 
-@media (max-width: 600px) {
+/* ── CELULAR ── */
+@media (max-width: 700px) {
+  .container { padding: 12px; }
+
+  /* Header: título arriba, acciones abajo, sin apretarse */
+  .header { padding: 12px 14px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .header h1 { font-size: 15px; }
+  .header > div { width: 100%; justify-content: flex-start; flex-wrap: wrap; gap: 10px !important; }
+
+  /* Pestañas: se deslizan horizontalmente con el dedo */
+  .nav { padding: 0 10px; -webkit-overflow-scrolling: touch; }
+  .nav-tab { padding: 10px 12px; font-size: 12.5px; }
+
+  /* Tarjetas y formularios con menos aire */
+  .card-header { padding: 12px 14px; }
+  .card-body { padding: 14px; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
-  .metrics { grid-template-columns: 1fr 1fr; }
+
+  /* Filtros: uno debajo del otro, ancho completo */
+  .filters { padding: 12px 14px; flex-direction: column; align-items: stretch; }
+  .filter-group { min-width: 0; width: 100%; }
+  .filters .btn { width: 100%; justify-content: center; }
+
+  /* Métricas y KPIs: 2 columnas en vez de 4-6 */
+  .metrics, .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .metric-value, .kpi-value { font-size: 22px; }
+
+  /* Gráficos de barra: etiquetas más cortas para que entren */
+  .chart-grid { grid-template-columns: 1fr; }
+  .bar-label { width: 72px; font-size: 11px; }
+  .bar-num { width: 42px; font-size: 11px; }
+
+  /* Tablas: texto un poco más chico para aprovechar el ancho */
+  table { font-size: 12px; }
+  th, td { padding: 8px 7px; }
+
+  /* Botones de acción en tablas: que se acomoden en varias líneas prolijamente */
+  td .btn { margin: 2px 3px 2px 0; }
+
+  /* Modales: ocupan casi toda la pantalla, sin bordes perdidos */
+  .modal { padding: 18px; max-width: 94vw; }
+  .overlay { padding: 10px; }
+
   .search-input { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .metrics, .kpi-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -231,6 +275,7 @@ body.sin-costos .col-costo { display: none !important; }
     <h2 style="font-size:18px;font-weight:700;text-align:center;margin-bottom:6px;">Administración · Capacitaciones</h2>
     <p style="font-size:13px;color:#666;text-align:center;margin-bottom:20px;">Ingresá con tu usuario</p>
     <input type="text" id="gate-user" placeholder="Usuario" autocomplete="username"
+           autocapitalize="off" autocorrect="off" spellcheck="false"
            style="width:100%;padding:11px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:10px;"
            onkeydown="if(event.key==='Enter') document.getElementById('gate-pass').focus()">
     <input type="password" id="gate-pass" placeholder="Contraseña" autocomplete="current-password"
@@ -1022,9 +1067,11 @@ async function validarAcceso() {
   const btn = document.getElementById('gate-btn');
   btn.disabled = true; btn.textContent = 'Verificando...';
 
+  // Insensible a mayúsculas/minúsculas: en el celular el teclado suele
+  // autocapitalizar la primera letra, y no queremos que eso rompa el ingreso.
   const { data } = await sb.from('usuarios')
     .select('usuario, nombre, rol, activo, clave')
-    .eq('usuario', u).eq('activo', true).maybeSingle();
+    .ilike('usuario', u).eq('activo', true).maybeSingle();
 
   btn.disabled = false; btn.textContent = 'Ingresar';
 
