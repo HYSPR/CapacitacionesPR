@@ -579,6 +579,12 @@ body.sin-costos .col-costo { display: none !important; }
           <label>Período (año de inicio del ciclo)</label>
           <select id="pl-periodo"></select>
         </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="pl-parada-linea" style="width:auto;">
+            Este centro implica parada de línea para este curso
+          </label>
+        </div>
         <button class="btn btn-primary" onclick="agregarPlan()">+ Agregar al plan</button>
       </div>
     </div>
@@ -590,8 +596,8 @@ body.sin-costos .col-costo { display: none !important; }
       </div>
       <div class="table-wrap">
         <table id="tbl-plan">
-          <thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes</th><th>Acción</th></tr></thead>
-          <tbody id="body-plan"><tr class="empty-row"><td colspan="5">Cargando...</td></tr></tbody>
+          <thead><tr><th>Código</th><th>Capacitación</th><th>Centro</th><th>Mes</th><th>Parada línea</th><th>Acción</th></tr></thead>
+          <tbody id="body-plan"><tr class="empty-row"><td colspan="6">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -814,12 +820,6 @@ body.sin-costos .col-costo { display: none !important; }
           <label>Costo total del curso ($)</label>
           <input type="number" id="c-costo" placeholder="0" step="0.01" min="0">
         </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="c-parada-linea" style="width:auto;">
-            Implica parada de línea
-          </label>
-        </div>
         <button class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
       </div>
     </div>
@@ -954,12 +954,6 @@ body.sin-costos .col-costo { display: none !important; }
     <div class="form-group" style="max-width:50%;">
       <label>Costo total del curso ($)</label>
       <input type="number" id="edit-curso-costo" step="0.01" min="0">
-    </div>
-    <div class="form-group">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-        <input type="checkbox" id="edit-curso-parada-linea" style="width:auto;">
-        Implica parada de línea
-      </label>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
       <button class="btn btn-outline" onclick="cerrarModalCurso()">Cancelar</button>
@@ -2163,7 +2157,7 @@ async function cargarCursos() {
     const costo = (c.costo != null) ? '$' + Number(c.costo).toLocaleString('es-AR') : '—';
     return `<tr ${bg}>
       <td><span class="badge badge-gray">${c.codigo||'—'}</span></td>
-      <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}${c.parada_linea ? ' <span class="badge badge-yellow" title="Implica parada de línea">⏸ parada</span>' : ''}</td>
+      <td style="font-weight:500;">${c.titulo}${inactivo ? ' <span class="badge badge-gray">Inactiva</span>' : ''}</td>
       <td><span class="badge badge-blue">${c.tipo||'—'}</span></td>
       <td>${c.responsable||'—'}</td>
       <td>${c.duracion_horas||'—'} hs</td>
@@ -2188,16 +2182,14 @@ async function agregarCurso() {
   const horas = parseFloat(document.getElementById('c-horas').value) || null;
   const temario = document.getElementById('c-temario').value.trim();
   const costo = parseFloat(document.getElementById('c-costo').value) || 0;
-  const paradaLinea = document.getElementById('c-parada-linea').checked;
   if (!titulo) { toast('Completá el título.'); return; }
-  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario, costo, parada_linea: paradaLinea });
+  const { error } = await sb.from('capacitaciones').insert({ titulo, tipo, responsable, duracion_horas: horas, temario, costo });
   if (error) { toast('Error al guardar.'); return; }
   document.getElementById('c-titulo').value = '';
   document.getElementById('c-responsable').value = '';
   document.getElementById('c-horas').value = '';
   document.getElementById('c-temario').value = '';
   document.getElementById('c-costo').value = '';
-  document.getElementById('c-parada-linea').checked = false;
   auditar('crear','curso','Agregó la capacitación "'+titulo+'"');
   toast('Capacitación agregada.');
   cargarCursos();
@@ -2324,7 +2316,6 @@ async function editarCurso(id) {
   document.getElementById('edit-curso-horas').value = data.duracion_horas || '';
   document.getElementById('edit-curso-temario').value = data.temario || '';
   document.getElementById('edit-curso-costo').value = (data.costo != null) ? data.costo : '';
-  document.getElementById('edit-curso-parada-linea').checked = !!data.parada_linea;
   document.getElementById('modal-curso').classList.add('open');
 }
 
@@ -2343,8 +2334,7 @@ async function guardarCurso() {
     responsable: document.getElementById('edit-curso-responsable').value.trim(),
     duracion_horas: parseFloat(document.getElementById('edit-curso-horas').value) || null,
     temario: document.getElementById('edit-curso-temario').value.trim(),
-    costo: parseFloat(document.getElementById('edit-curso-costo').value) || 0,
-    parada_linea: document.getElementById('edit-curso-parada-linea').checked
+    costo: parseFloat(document.getElementById('edit-curso-costo').value) || 0
   }).eq('id', id);
   if (error) { toast('Error al guardar.'); return; }
   cerrarModalCurso();
@@ -2373,15 +2363,18 @@ async function cargarPlanCursos() {
 }
 
 async function agregarPlan() {
+  if (!requiereEditor()) return;
   const cap = document.getElementById('pl-curso').value;
   const centro = document.getElementById('pl-centro').value;
   const mes = parseInt(document.getElementById('pl-mes').value);
   const periodo = parseInt(document.getElementById('pl-periodo').value);
+  const paradaLinea = document.getElementById('pl-parada-linea').checked;
   if (!cap) { toast('Seleccioná una capacitación.'); return; }
 
   const { error } = await sb.from('plan_capacitacion')
-    .upsert({ capacitacion_id: cap, centro, mes, periodo }, { onConflict: 'capacitacion_id,centro,periodo' });
+    .upsert({ capacitacion_id: cap, centro, mes, periodo, parada_linea: paradaLinea }, { onConflict: 'capacitacion_id,centro,periodo' });
   if (error) { toast('Error: ' + error.message); return; }
+  document.getElementById('pl-parada-linea').checked = false;
   toast('Agregado al plan.');
   cargarPlan();
 }
@@ -2393,7 +2386,7 @@ async function cargarPlan() {
     .eq('periodo', periodo);
 
   const tbody = document.getElementById('body-plan');
-  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Sin planificaciones para este período.</td></tr>'; return; }
+  if (!data || !data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Sin planificaciones para este período.</td></tr>'; return; }
 
   // Orden fiscal: julio primero, junio último
   const ordenFiscalMes = (mes) => mes >= 7 ? mes - 7 : mes + 5;
@@ -2404,6 +2397,7 @@ async function cargarPlan() {
     <td style="font-weight:500;">${p.capacitaciones?.titulo || '—'}</td>
     <td>${p.centro}</td>
     <td>${MESES[p.mes]}</td>
+    <td>${p.parada_linea ? '<span class="badge badge-yellow">⏸ Sí</span>' : '<span style="color:#bbb;">No</span>'}</td>
     <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarPlan('${p.id}')">Quitar</button></td>
   </tr>`).join('');
 }
@@ -2424,7 +2418,7 @@ async function cargarAvance() {
 
   // 1. Traer el plan del período
   let qPlan = sb.from('plan_capacitacion')
-    .select('*, capacitaciones(titulo, codigo, duracion_horas, parada_linea)')
+    .select('*, capacitaciones(titulo, codigo, duracion_horas)')
     .eq('periodo', periodo);
   if (centroFiltro) qPlan = qPlan.eq('centro', centroFiltro);
   const { data: plan } = await qPlan;
@@ -2576,7 +2570,7 @@ async function cargarAvance() {
       : (f.jornadas > 1 ? `<span class="badge badge-blue">${f.jornadas} jornadas</span>` : '1');
     const horasTxt = f.dictada ? f.horasTotales.toFixed(1) + ' hs' : '—';
     const duracionCurso = (f.plan.capacitaciones?.duracion_horas != null) ? f.plan.capacitaciones.duracion_horas + ' hs' : '—';
-    const paradaTxt = f.plan.capacitaciones?.parada_linea
+    const paradaTxt = f.plan.parada_linea
       ? '<span class="badge badge-yellow" title="Implica parada de línea">⏸ Sí</span>'
       : '<span style="color:#bbb;">No</span>';
     html += `<tr>
@@ -2729,7 +2723,7 @@ async function cargarTablero() {
 
   // 1. Sesiones cerradas del período
   let qSes = sb.from('sesiones')
-    .select('*, capacitaciones(id, titulo, tipo, duracion_horas, costo, parada_linea)')
+    .select('*, capacitaciones(id, titulo, tipo, duracion_horas, costo)')
     .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
   // Al filtrar por centro se incluyen también las online (no tienen centro y valen para todos)
   if (centroF) qSes = qSes.or('centro.eq."' + centroF + '",modalidad.eq.online');
@@ -2880,10 +2874,21 @@ async function cargarTablero() {
     : '<div style="color:#bbb;font-size:13px;">Sin datos.</div>';
 
   // ── GRÁFICO: parada de línea ──
+  // El dato vive en el Plan (curso+centro), no en el curso. Se arma un mapa para cruzarlo.
+  const paradaPorCursoCentro = {};
+  plan.forEach(p => { paradaPorCursoCentro[p.capacitacion_id + '|' + p.centro] = !!p.parada_linea; });
+
   let hsParada = 0, hsSinParada = 0;
   sesiones.forEach(s => {
     const h = s.capacitaciones?.duracion_horas || 0;
-    if (s.capacitaciones?.parada_linea) hsParada += h; else hsSinParada += h;
+    let esParada = false;
+    if (s.modalidad === 'online') {
+      const cs = centrosPorSesion[s.id];
+      if (cs) for (const c of cs) { if (paradaPorCursoCentro[s.capacitacion_id + '|' + c]) { esParada = true; break; } }
+    } else {
+      esParada = !!paradaPorCursoCentro[s.capacitacion_id + '|' + s.centro];
+    }
+    if (esParada) hsParada += h; else hsSinParada += h;
   });
   const maxPar = Math.max(hsParada, hsSinParada, 1);
   document.getElementById('ch-parada').innerHTML =
