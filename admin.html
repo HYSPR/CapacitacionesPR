@@ -2397,7 +2397,7 @@ async function cargarPlan() {
     <td style="font-weight:500;">${p.capacitaciones?.titulo || '—'}</td>
     <td>${p.centro}</td>
     <td>${MESES[p.mes]}</td>
-    <td>${p.parada_linea ? '<span class="badge badge-yellow">⏸ Sí</span>' : '<span style="color:#bbb;">No</span>'}</td>
+    <td><span onclick="toggleParadaPlan('${p.id}', ${p.parada_linea ? 'true' : 'false'})" style="cursor:pointer;" title="Tocar para cambiar">${p.parada_linea ? '<span class="badge badge-yellow">⏸ Sí</span>' : '<span style="color:#bbb;">No</span>'}</span></td>
     <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarPlan('${p.id}')">Quitar</button></td>
   </tr>`).join('');
 }
@@ -2408,6 +2408,16 @@ async function borrarPlan(id) {
   await sb.from('plan_capacitacion').delete().eq('id', id);
   auditar('borrar', 'plan', 'Quitó una capacitación del plan (id ' + id + ')');
   toast('Quitado del plan.');
+  cargarPlan();
+}
+
+async function toggleParadaPlan(id, valorActual) {
+  if (!requiereEditor()) return;
+  const nuevoValor = !valorActual;
+  const { error } = await sb.from('plan_capacitacion').update({ parada_linea: nuevoValor }).eq('id', id);
+  if (error) { toast('Error: ' + error.message); return; }
+  auditar('editar', 'plan', 'Cambió parada de línea a ' + (nuevoValor ? 'Sí' : 'No') + ' (plan id ' + id + ')');
+  toast(nuevoValor ? 'Marcado como parada de línea.' : 'Desmarcado.');
   cargarPlan();
 }
 
