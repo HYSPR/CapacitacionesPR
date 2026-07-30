@@ -679,8 +679,8 @@ body.sin-costos .col-costo { display: none !important; }
         </p>
         <div class="table-wrap">
           <table id="tbl-faltantes">
-            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Contrato</th><th>Curso</th></tr></thead>
-            <tbody><tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr></tbody>
+            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Contrato</th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="4">Aplicá un filtro para ver datos.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1805,7 +1805,7 @@ function renderFaltantes() {
   const tbody = document.querySelector('#tbl-faltantes tbody');
 
   if (!sesiones || !sesiones.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Aplicá un filtro para ver datos.</td></tr>';
     return;
   }
 
@@ -1815,7 +1815,7 @@ function renderFaltantes() {
     const cid = s.capacitacion_id;
     if (!cid) return;
     if (cursoFiltro && cid !== cursoFiltro) return;
-    if (!porCurso[cid]) porCurso[cid] = { titulo: s.capacitaciones?.titulo || '—', sesIds: new Set() };
+    if (!porCurso[cid]) porCurso[cid] = { titulo: s.capacitaciones?.titulo || '—', sesIds: new Set(), faltantes: [] };
     porCurso[cid].sesIds.add(s.id);
   });
 
@@ -1825,7 +1825,6 @@ function renderFaltantes() {
     asistieronPorSesion[a.sesion_id].add(a.empleado_id);
   });
 
-  const filas = [];
   Object.values(porCurso).forEach(info => {
     const asistieronSet = new Set();
     info.sesIds.forEach(sid => { (asistieronPorSesion[sid] || new Set()).forEach(id => asistieronSet.add(id)); });
@@ -1838,26 +1837,31 @@ function renderFaltantes() {
       if (vistos.has(c.empleado_id)) return;
       vistos.add(c.empleado_id);
       if (sectorFiltro && c.empleados.sector !== sectorFiltro) return;
-      filas.push({
-        legajo: c.empleados.legajo, nombre: c.empleados.nombre,
-        sector: c.empleados.sector, contrato: c.empleados.contrato, curso: info.titulo
-      });
+      info.faltantes.push({ legajo: c.empleados.legajo, nombre: c.empleados.nombre, sector: c.empleados.sector, contrato: c.empleados.contrato });
     });
   });
 
-  if (!filas.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Sin faltantes en este período.</td></tr>';
+  // Solo los cursos que efectivamente tienen faltantes, ordenados alfabéticamente
+  const grupos = Object.values(porCurso)
+    .filter(info => info.faltantes.length > 0)
+    .sort((a, b) => a.titulo.localeCompare(b.titulo));
+
+  if (!grupos.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Sin faltantes en este período.</td></tr>';
     return;
   }
 
-  filas.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
-  tbody.innerHTML = filas.map(e => `<tr>
-    <td>${e.legajo}</td>
-    <td style="font-weight:500;color:#c0392b;">${e.nombre}</td>
-    <td>${e.sector||'—'}</td>
-    <td>${e.contrato||'—'}</td>
-    <td>${e.curso}</td>
-  </tr>`).join('');
+  tbody.innerHTML = grupos.map(g => {
+    g.faltantes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+    const encabezado = `<tr><td colspan="4" style="background:#F4F6F9;font-weight:600;color:#1B4F8A;padding:10px 12px;">${g.titulo} (${g.faltantes.length})</td></tr>`;
+    const filas = g.faltantes.map(e => `<tr>
+      <td>${e.legajo}</td>
+      <td style="font-weight:500;color:#c0392b;">${e.nombre}</td>
+      <td>${e.sector||'—'}</td>
+      <td>${e.contrato||'—'}</td>
+    </tr>`).join('');
+    return encabezado + filas;
+  }).join('');
 }
 
 async function exportarExcel() {
