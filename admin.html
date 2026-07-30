@@ -478,8 +478,7 @@ body.sin-costos .col-costo { display: none !important; }
               <th>Tipo</th>
               <th onclick="sort('tbl-sesiones',3)">Centro ↕</th>
               <th onclick="sort('tbl-sesiones',4)">Instructor ↕</th>
-              <th>Lugar</th>
-              <th onclick="sort('tbl-sesiones',6)">Asistentes ↕</th>
+              <th onclick="sort('tbl-sesiones',5)">Asistentes ↕</th>
               <th class="col-costo">Costo/pers.</th>
               <th>Estado</th>
               <th>PDF</th>
@@ -670,16 +669,18 @@ body.sin-costos .col-costo { display: none !important; }
         <div class="card-header">
           <h2>Personas que NO hicieron un curso</h2>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="f-curso-faltante" style="font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;min-width:200px;">
-              <option value="">Seleccioná un curso...</option>
+            <select id="f-curso-faltante" onchange="renderFaltantes()" style="font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;min-width:200px;">
+              <option value="">Todos los cursos</option>
             </select>
-            <button class="btn btn-primary btn-sm" onclick="cargarFaltantes()">Ver faltantes</button>
           </div>
         </div>
+        <p style="font-size:12px;color:#888;padding:0 20px 10px;margin-top:-6px;">
+          Se muestran los faltantes de todos los cursos del período. Usá el desplegable para acotar a uno solo — solo lista los cursos que tuvieron sesiones dictadas en el rango elegido.
+        </p>
         <div class="table-wrap">
           <table id="tbl-faltantes">
-            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Contrato</th></tr></thead>
-            <tbody><tr class="empty-row"><td colspan="4">Seleccioná un curso.</td></tr></tbody>
+            <thead><tr><th>Legajo</th><th>Nombre</th><th>Sector</th><th>Contrato</th><th>Curso</th></tr></thead>
+            <tbody><tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1291,7 +1292,6 @@ async function cargarSesiones() {
       <td><span class="badge badge-blue">${s.capacitaciones?.tipo || '—'}</span></td>
       <td>${s.centro || (s.modalidad === 'online' ? '<span style="color:#888;">Todas</span>' : '—')}</td>
       <td>${s.instructor || '—'}</td>
-      <td>${s.lugar || '—'}</td>
       <td style="font-weight:600;">${n}</td>
       <td class="col-costo">${costoPP}</td>
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
@@ -1417,7 +1417,7 @@ async function generarPDFManual(sesion, verif) {
     ['Codigo',       cap.codigo || '-'],
     ['Capacitacion', cap.titulo],
     ['Centro',       sesion.centro || (sesion.modalidad === 'online' ? 'Todas (online)' : '-')],
-    ['Fecha y lugar', formatFecha(sesion.fecha) + ' - ' + (sesion.lugar || '-')],
+    ['Fecha', formatFecha(sesion.fecha)],
     ['Instructor',   sesion.instructor || '-'],
     ['Responsable',  cap.responsable || '-'],
     ['Duracion',     (cap.duracion_horas || '-') + ' hs'],
@@ -1715,7 +1715,7 @@ async function cargarSeguimiento() {
       .in('sesion_id', sesIds).eq('anulada', false);
     asistencias = data || [];
     const { data: conv } = await sb.from('convocados')
-      .select('sesion_id, empleado_id, empleados(id, sector, activo)')
+      .select('sesion_id, empleado_id, empleados(id, legajo, nombre, sector, contrato, activo)')
       .in('sesion_id', sesIds);
     convocados = conv || [];
   }
@@ -1728,6 +1728,8 @@ async function cargarSeguimiento() {
   datosGlobales = { sesiones: sesFiltradas, asistencias, convocados, empleados: empleados || [] };
 
   renderPorCurso();
+  poblarFiltroFaltantesCurso();
+  renderFaltantes();
 }
 
 function renderPorCurso() {
@@ -1781,55 +1783,80 @@ function renderPorCurso() {
   }).join('');
 }
 
-async function cargarFaltantes() {
-  const cursoId = document.getElementById('f-curso-faltante').value;
-  if (!cursoId) { toast('Seleccioná un curso.'); return; }
-  const desde = document.getElementById('f-desde').value;
-  const hasta = document.getElementById('f-hasta').value;
+// Solo lista los cursos que tuvieron sesiones cerradas dentro del rango de fechas ya filtrado
+function poblarFiltroFaltantesCurso() {
+  const sel = document.getElementById('f-curso-faltante');
+  const actual = sel.value;
+  const map = {};
+  (datosGlobales.sesiones || []).forEach(s => {
+    if (s.capacitacion_id) map[s.capacitacion_id] = s.capacitaciones?.titulo || '—';
+  });
+  const opciones = Object.entries(map).sort((a, b) => a[1].localeCompare(b[1]));
+  sel.innerHTML = '<option value="">Todos los cursos</option>' +
+    opciones.map(([id, t]) => `<option value="${id}" ${id === actual ? 'selected' : ''}>${t}</option>`).join('');
+}
 
-  const { data: ses } = await sb.from('sesiones').select('id')
-    .eq('capacitacion_id', cursoId).eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
-  const sesIds = (ses || []).map(s => s.id);
+// Todos los faltantes del período (o de un curso puntual si se elige del desplegable).
+// No hace consultas nuevas: reusa lo que ya trajo cargarSeguimiento().
+function renderFaltantes() {
+  const { sesiones, asistencias, convocados } = datosGlobales;
+  const cursoFiltro = document.getElementById('f-curso-faltante').value;
+  const sectorFiltro = document.getElementById('f-sector').value;
+  const tbody = document.querySelector('#tbl-faltantes tbody');
 
-  if (!sesIds.length) {
-    document.querySelector('#tbl-faltantes tbody').innerHTML =
-      '<tr><td colspan="4" style="text-align:center;padding:20px;color:#888;">No hay sesiones dictadas de este curso en el período.</td></tr>';
+  if (!sesiones || !sesiones.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Aplicá un filtro para ver datos.</td></tr>';
     return;
   }
 
-  // Quiénes asistieron (firmaron)
-  const { data: asis } = await sb.from('asistencias').select('empleado_id').in('sesion_id', sesIds).eq('anulada', false);
-  const asistieronIds = new Set((asis || []).map(a => a.empleado_id));
-
-  // Quiénes fueron CONVOCADOS (el universo esperado, no toda la nómina)
-  const { data: conv } = await sb.from('convocados')
-    .select('empleado_id, empleados(id, legajo, nombre, sector, contrato, activo)')
-    .in('sesion_id', sesIds);
-
-  // Ausentes = convocados que no firmaron (únicos, solo activos)
-  const ausentesMap = {};
-  (conv || []).forEach(c => {
-    if (!c.empleados || !c.empleados.activo) return;
-    if (asistieronIds.has(c.empleado_id)) return;
-    ausentesMap[c.empleado_id] = c.empleados;
+  // Agrupar sesiones por curso (un curso puede tener varias jornadas/dictados en el período)
+  const porCurso = {};
+  sesiones.forEach(s => {
+    const cid = s.capacitacion_id;
+    if (!cid) return;
+    if (cursoFiltro && cid !== cursoFiltro) return;
+    if (!porCurso[cid]) porCurso[cid] = { titulo: s.capacitaciones?.titulo || '—', sesIds: new Set() };
+    porCurso[cid].sesIds.add(s.id);
   });
 
-  // Filtro opcional por sector
-  const sector = document.getElementById('f-sector').value;
-  let ausentes = Object.values(ausentesMap);
-  if (sector) ausentes = ausentes.filter(e => e.sector === sector);
-  ausentes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  const asistieronPorSesion = {};
+  asistencias.forEach(a => {
+    if (!asistieronPorSesion[a.sesion_id]) asistieronPorSesion[a.sesion_id] = new Set();
+    asistieronPorSesion[a.sesion_id].add(a.empleado_id);
+  });
 
-  const tbody = document.querySelector('#tbl-faltantes tbody');
-  if (!ausentes.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Todos los convocados asistieron.</td></tr>';
+  const filas = [];
+  Object.values(porCurso).forEach(info => {
+    const asistieronSet = new Set();
+    info.sesIds.forEach(sid => { (asistieronPorSesion[sid] || new Set()).forEach(id => asistieronSet.add(id)); });
+
+    const vistos = new Set(); // una fila por persona y curso, aunque el curso tenga varias jornadas
+    convocados.forEach(c => {
+      if (!info.sesIds.has(c.sesion_id)) return;
+      if (!c.empleados || c.empleados.activo === false) return;
+      if (asistieronSet.has(c.empleado_id)) return;
+      if (vistos.has(c.empleado_id)) return;
+      vistos.add(c.empleado_id);
+      if (sectorFiltro && c.empleados.sector !== sectorFiltro) return;
+      filas.push({
+        legajo: c.empleados.legajo, nombre: c.empleados.nombre,
+        sector: c.empleados.sector, contrato: c.empleados.contrato, curso: info.titulo
+      });
+    });
+  });
+
+  if (!filas.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#1A6B3C;font-weight:500;">✓ Sin faltantes en este período.</td></tr>';
     return;
   }
-  tbody.innerHTML = ausentes.map(e => `<tr>
+
+  filas.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  tbody.innerHTML = filas.map(e => `<tr>
     <td>${e.legajo}</td>
     <td style="font-weight:500;color:#c0392b;">${e.nombre}</td>
     <td>${e.sector||'—'}</td>
     <td>${e.contrato||'—'}</td>
+    <td>${e.curso}</td>
   </tr>`).join('');
 }
 
@@ -2643,8 +2670,8 @@ async function backupExcel() {
     const wb = XLSX.utils.book_new();
 
     // Hoja Sesiones
-    const hSes = [['Fecha','Codigo','Capacitacion','Tipo','Centro','Lugar','Instructor','Estado','Verif. eficacia']];
-    (sesiones.data||[]).forEach(s => hSes.push([formatFecha(s.fecha), s.capacitaciones?.codigo||'', s.capacitaciones?.titulo||'', s.capacitaciones?.tipo||'', s.centro||'', s.lugar||'', s.instructor||'', s.estado, s.verificacion_eficacia||'']));
+    const hSes = [['Fecha','Codigo','Capacitacion','Tipo','Centro','Instructor','Estado','Verif. eficacia']];
+    (sesiones.data||[]).forEach(s => hSes.push([formatFecha(s.fecha), s.capacitaciones?.codigo||'', s.capacitaciones?.titulo||'', s.capacitaciones?.tipo||'', s.centro||'', s.instructor||'', s.estado, s.verificacion_eficacia||'']));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hSes), 'Sesiones');
 
     // Hoja Asistencias
