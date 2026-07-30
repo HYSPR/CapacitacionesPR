@@ -254,7 +254,7 @@ body {
     </div>
     <div class="form-group">
       <label>Modalidad *</label>
-      <select id="inp-modalidad" onchange="actualizarLugarLabel()">
+      <select id="inp-modalidad" onchange="actualizarVisibilidadCentro()">
         <option value="presencial">Presencial (con firma)</option>
         <option value="online">Online (sin firma)</option>
       </select>
@@ -267,15 +267,9 @@ body {
         <option>San Rafael</option>
       </select>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Fecha *</label>
-        <input type="date" id="inp-fecha">
-      </div>
-      <div class="form-group">
-        <label>Lugar</label>
-        <input type="text" id="inp-lugar" placeholder="Ej: Sala 2">
-      </div>
+    <div class="form-group">
+      <label>Fecha *</label>
+      <input type="date" id="inp-fecha">
     </div>
     <div class="form-group">
       <label>Instructor *</label>
@@ -402,7 +396,7 @@ body {
 <!-- FOOTER BAR -->
 <div class="footer-bar" id="footer-bar" style="display:none;">
   <div class="count">
-    <strong id="f-firmaron">0</strong> firmaron &nbsp;·&nbsp; <strong id="f-convocados">0</strong> convocados
+    <strong id="f-firmaron">0</strong> firmaron &nbsp;·&nbsp; <strong id="f-convocados">0</strong> convocados<span id="f-faltan"></span>
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn-cerrar" onclick="abrirConvocados()">👥 Convocados</button>
@@ -593,10 +587,8 @@ async function toggleContinuacion() {
   }
 }
 
-function actualizarLugarLabel() {
+function actualizarVisibilidadCentro() {
   const online = document.getElementById('inp-modalidad').value === 'online';
-  const grupoLugar = document.getElementById('inp-lugar').closest('.form-group');
-  if (grupoLugar) grupoLugar.style.display = online ? 'none' : 'block';
   // El centro no aplica en online (participa gente de varias plantas)
   const grupoCentro = document.getElementById('inp-centro').closest('.form-group');
   if (grupoCentro) grupoCentro.style.display = online ? 'none' : 'block';
@@ -606,7 +598,6 @@ async function abrirSesion() {
   const cap = document.getElementById('sel-cap').value;
   const centro = document.getElementById('inp-centro').value;
   const fecha = document.getElementById('inp-fecha').value;
-  const lugar = document.getElementById('inp-lugar').value.trim();
   const inst = document.getElementById('inp-instructor').value.trim();
   const modalidadSel = document.getElementById('inp-modalidad').value;
   const online = (modalidadSel === 'online');
@@ -623,7 +614,7 @@ async function abrirSesion() {
   if (esContinuacion && !madreId) { toast('Elegí de qué capacitación es continuación.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
   // En online el centro queda vacío (multi-centro); cada empleado conserva el suyo
-  const nuevaSesion = { capacitacion_id: cap, centro: online ? null : centro, fecha, lugar: online ? null : lugar, instructor: inst, modalidad: modalidadSel };
+  const nuevaSesion = { capacitacion_id: cap, centro: online ? null : centro, fecha, instructor: inst, modalidad: modalidadSel };
   if (madreId) nuevaSesion.sesion_madre_id = madreId;
 
   const { data, error } = await sb.from('sesiones')
@@ -636,7 +627,7 @@ async function abrirSesion() {
   sesion = data;
   esOnline = online;
   document.getElementById('h-titulo').textContent = data.capacitaciones.titulo;
-  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro + ' · ' + (lugar || 'Sin lugar')) + ' · ' + inst;
+  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro) + ' · ' + inst;
 
   const { data: emps } = await sb.from('empleados').select('*').eq('activo', true).order('nombre');
   // Online: todos los empleados de todas las plantas. Presencial: solo los del centro.
@@ -941,6 +932,7 @@ function actualizarContador() {
   document.getElementById('h-counter').textContent = f + ' firmaron · ' + c + ' convocados' + (c ? ' · faltan ' + faltan : '');
   document.getElementById('f-firmaron').textContent = f;
   document.getElementById('f-convocados').textContent = c;
+  document.getElementById('f-faltan').textContent = c ? (' \u00b7 faltan ' + faltan) : '';
 }
 
 // ── CONVOCADOS ──
@@ -1188,7 +1180,7 @@ async function generarPDF(firmaInstructor) {
     ['Codigo',       cap.codigo || '-'],
     ['Capacitacion', cap.titulo],
     ['Centro',       sesion.centro || '-'],
-    ['Fecha y lugar', formatFecha(sesion.fecha) + ' - ' + (sesion.lugar || '-')],
+    ['Fecha', formatFecha(sesion.fecha)],
     ['Instructor',   sesion.instructor],
     ['Responsable',  cap.responsable || '-'],
     ['Duracion',     (cap.duracion_horas || '-') + ' hs'],
