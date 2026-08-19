@@ -265,6 +265,7 @@ body {
         <option value="">Seleccioná el centro...</option>
         <option>Bella Vista</option>
         <option>San Rafael</option>
+        <option>Administración</option>
       </select>
     </div>
     <div class="form-group">
@@ -630,8 +631,10 @@ async function abrirSesion() {
   document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro) + ' · ' + inst;
 
   const { data: emps } = await sb.from('empleados').select('*').eq('activo', true).order('nombre');
-  // Online: todos los empleados de todas las plantas. Presencial: solo los del centro.
-  empleados = esOnline ? (emps || []) : (emps || []).filter(e => !e.centro || e.centro === centro);
+  // Online y Administración: puede firmar cualquiera, sin importar su centro de ficha.
+  // El resto de los centros (Bella Vista, San Rafael) sí filtran solo a su gente.
+  const sinFiltroDeCentro = esOnline || centro === 'Administración';
+  empleados = sinFiltroDeCentro ? (emps || []) : (emps || []).filter(e => !e.centro || e.centro === centro);
   firmados = new Set();
   convocados = new Set();
 
@@ -1099,24 +1102,13 @@ function limpiarInst() {
 async function cerrarSesion() {
   try {
     const firmaInst = padInst && !padInst.isEmpty() ? padInst.toDataURL('image/png') : null;
-    const pdfBytes = await generarPDF(firmaInst);
-    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const hashHex = await sha256(pdfBytes);
+    // Capturamos todo lo necesario ANTES de tocar la pantalla, para que el PDF en
+    // segundo plano no dependa de nada que pueda cambiar si el instructor ya se fue
+    // a otra sesión.
+    const sesionIdCerrada = sesion.id;
+    const verifCapturada = verificacionEficacia;
 
-    // 1) DESCARGAR EL ACTA SIEMPRE (aunque falle la nube, el usuario se lleva el PDF)
-    const url = URL.createObjectURL(pdfBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Acta_' + sesion.capacitaciones.titulo.replace(/\s+/g, '_') + '_' + sesion.fecha + '.pdf';
-    a.click();
-    URL.revokeObjectURL(url);
-
-    // 2) Subir el acta a la nube
-    const pdfPath = sesion.id + '/acta_' + Date.now() + '.pdf';
-    const { error: pdfErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
-    if (pdfErr) { toast('El acta se descargó, pero no subió a la nube: ' + pdfErr.message); }
-
-    // 3) Registro externo (opcional, solo online). Si falla, se sigue igual.
+    // Registro externo (opcional, solo online). Si falla, se sigue igual.
     let registroPath = null;
     const inputReg = document.getElementById('inp-registro');
     if (esOnline && inputReg && inputReg.files && inputReg.files.length) {
@@ -1124,41 +1116,154 @@ async function cerrarSesion() {
       const ext = file.name.split('.').pop();
       const p = sesion.id + '/registro_' + Date.now() + '.' + ext;
       const { error: regErr } = await sb.storage.from('registros').upload(p, file, { contentType: file.type || 'application/octet-stream' });
-      if (regErr) toast('El registro externo no se pudo subir; el acta sí se guardó.');
+      if (regErr) toast('El registro externo no se pudo subir; la sesión se cerró igual.');
       else registroPath = p;
     }
 
-    // 4) Marcar la sesión como CERRADA. Lo esencial: que quede cerrada sí o sí.
+    // Marcar la sesión como CERRADA. Esto es lo único que el instructor espera.
     const datosCierre = {
       estado: 'cerrada',
       firma_instructor: firmaInst,
       cerrada_at: new Date().toISOString(),
-      pdf_url: pdfErr ? null : pdfPath,
-      pdf_hash: hashHex,
       verificacion_eficacia: verificacionEficacia
     };
     if (registroPath) datosCierre.registro_url = registroPath;
 
-    let { error: updErr } = await sb.from('sesiones').update(datosCierre).eq('id', sesion.id);
-
-    // Si falló (ej: falta alguna columna), reintentar con lo mínimo para no dejarla abierta
-    if (updErr) {
-      const r2 = await sb.from('sesiones').update({
-        estado: 'cerrada',
-        cerrada_at: new Date().toISOString(),
-        pdf_url: pdfErr ? null : pdfPath
-      }).eq('id', sesion.id);
-      if (r2.error) { toast('No se pudo cerrar la sesión: ' + r2.error.message); return; }
-      toast('Sesión cerrada (algunos datos extra no se guardaron).');
-    }
+    const { error: updErr } = await sb.from('sesiones').update(datosCierre).eq('id', sesionIdCerrada);
+    if (updErr) { toast('No se pudo cerrar la sesión: ' + updErr.message); return; }
 
     cerrarModal();
     document.getElementById('footer-bar').style.display = 'none';
     document.getElementById('app-header').style.display = 'none';
     document.getElementById('cerrada-texto').textContent = sesion.capacitaciones.titulo + ' · ' + firmados.size + ' asistentes';
     mostrar('p-cerrada');
+
+    // El acta se genera y sube SOLA en segundo plano, sin que el instructor tenga
+    // que esperar ni volver a tocar nada. Si falla por lo que sea (se cerró la
+    // pestaña, sin conexión), queda el botón "Generar PDF faltante" en el admin.
+    generarYSubirPDFSesion(sesionIdCerrada, firmaInst, verifCapturada);
   } catch (err) {
     toast('Error al finalizar: ' + (err.message || err));
+  }
+}
+
+// Autónoma: no depende de ninguna variable global (sesion, esOnline, etc.), así que
+// es segura para correr en segundo plano aunque el instructor ya haya abierto otra
+// sesión en la tablet mientras esto termina de subir.
+async function generarYSubirPDFSesion(sesionId, firmaInstructor, verifEficacia) {
+  try {
+    const { data: s, error: errSes } = await sb.from('sesiones')
+      .select('*, capacitaciones(titulo, codigo, responsable, duracion_horas)')
+      .eq('id', sesionId).single();
+    if (errSes || !s) return;
+
+    const esOnlineSes = s.modalidad === 'online';
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const m = 20;
+
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold');
+    doc.text('Registro de Asistencia a Capacitacion', m, 25);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
+    doc.text('REG-CAP-' + new Date().getFullYear() + '-' + String(s.numero_registro || '').padStart(4, '0'), 210 - m, 25, { align: 'right' });
+    doc.setTextColor(0);
+    doc.setDrawColor(220); doc.line(m, 28, 210 - m, 28);
+
+    const cap = s.capacitaciones;
+    let y = 36;
+    [
+      ['Codigo',       cap.codigo || '-'],
+      ['Capacitacion', cap.titulo],
+      ['Centro',       s.centro || (esOnlineSes ? 'Todas (online)' : '-')],
+      ['Fecha', formatFecha(s.fecha)],
+      ['Instructor',   s.instructor || '-'],
+      ['Responsable',  cap.responsable || '-'],
+      ['Duracion',     (cap.duracion_horas || '-') + ' hs'],
+      ['Verif. eficacia', verifEficacia || s.verificacion_eficacia || '-']
+    ].forEach(([k, v]) => {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(k, m, y);
+      doc.setFont('helvetica', 'normal');
+      const lineas = doc.splitTextToSize(String(v), 130);
+      doc.text(lineas, m + 35, y); y += 7 * lineas.length;
+    });
+
+    y += 4;
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    doc.setFillColor(245, 245, 242); doc.rect(m, y - 4, 170, 7, 'F');
+    doc.text('Legajo', m + 2, y);
+    doc.text('Nombre y sector', m + 22, y);
+    doc.text('Firma', m + 95, y);
+    doc.text('Hora', m + 153, y);
+    doc.line(m, y + 2, 210 - m, y + 2);
+    y += 7;
+
+    const { data: asiData } = await sb.from('asistencias')
+      .select('*, empleados(legajo, nombre, sector)')
+      .eq('sesion_id', sesionId).eq('anulada', false).order('firmado_at');
+
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    for (const a of asiData || []) {
+      if (y > 258) { doc.addPage(); y = 25; }
+      doc.text(a.empleados?.legajo || '-', m + 2, y);
+      doc.setFontSize(9); doc.setTextColor(0);
+      const nombre = doc.splitTextToSize(a.empleados?.nombre || '', 62)[0];
+      doc.text(nombre, m + 22, y);
+      if (a.empleados?.sector) {
+        doc.setFontSize(7); doc.setTextColor(120);
+        const sector = doc.splitTextToSize(a.empleados.sector, 62)[0];
+        doc.text(sector, m + 22, y + 3.5);
+        doc.setFontSize(9); doc.setTextColor(0);
+      }
+      try {
+        let img = a.firma_url;
+        if (img === 'ONLINE') {
+          doc.setFontSize(8); doc.setTextColor(120);
+          doc.text('Asistencia online', m + 92, y);
+          doc.setFontSize(9); doc.setTextColor(0);
+        } else if (img === 'MANUAL') {
+          doc.setFontSize(8); doc.setTextColor(120);
+          doc.text('Registrado manualmente', m + 92, y);
+          doc.setFontSize(9); doc.setTextColor(0);
+        } else if (img) {
+          if (!img.startsWith('data:')) {
+            const { data: b } = await sb.storage.from('firmas').download(img);
+            img = await blobToDataURL(b);
+          }
+          const comprimida = await comprimirFirma(img);
+          doc.addImage(comprimida, 'JPEG', m + 92, y - 4, 48, 9);
+        }
+      } catch (_) {}
+      doc.text(a.firmado_at ? new Date(a.firmado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '-', m + 153, y);
+      doc.setDrawColor(235); doc.line(m, y + 6, 210 - m, y + 6);
+      y += 13;
+    }
+
+    y += 6;
+    if (esOnlineSes) {
+      doc.setFontSize(8); doc.setTextColor(150);
+      doc.text('Capacitación online — registro sin firma manuscrita', m, y + 5);
+    } else {
+      if (firmaInstructor) {
+        try { doc.addImage(firmaInstructor, 'PNG', m, y - 14, 55, 18); } catch (_) {}
+      }
+      doc.setFontSize(8); doc.setTextColor(150);
+      doc.text('Firma del instructor', m, y + 5);
+    }
+    const hash = await sha256(doc.output('arraybuffer'));
+    doc.text('Cerrado: ' + new Date().toLocaleString('es-AR'), 210 - m, y + 5, { align: 'right' });
+    doc.text('SHA-256: ' + hash.slice(0, 8) + '...' + hash.slice(-4), 210 - m, y + 10, { align: 'right' });
+
+    const pdfBytes = doc.output('arraybuffer');
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const pdfPath = sesionId + '/acta_' + Date.now() + '.pdf';
+    const { error: upErr } = await sb.storage.from('pdfs').upload(pdfPath, pdfBlob, { contentType: 'application/pdf' });
+    if (upErr) return; // Sin ruido: queda "Generar PDF faltante" en el admin como red de seguridad.
+
+    await sb.from('sesiones').update({ pdf_url: pdfPath, pdf_hash: hash }).eq('id', sesionId);
+  } catch (_) {
+    // A propósito en silencio: el instructor ya cerró y se fue de la pantalla,
+    // no tiene sentido mostrarle un error de algo que pasa después. Si falla,
+    // el PDF se puede generar después desde el admin.
   }
 }
 
