@@ -326,7 +326,7 @@ body.sin-costos .col-costo { display: none !important; }
           <label>Centro</label>
           <select id="tb-centro" onchange="cargarTablero()">
             <option value="">Todos los centros</option>
-            <option>Bella Vista</option><option>San Rafael</option>
+            <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
           </select>
         </div>
         <div class="filter-group">
@@ -442,7 +442,7 @@ body.sin-costos .col-costo { display: none !important; }
           <label>Centro</label>
           <select id="ses-centro" onchange="cargarSesiones()">
             <option value="">Todos los centros</option>
-            <option>Bella Vista</option><option>San Rafael</option>
+            <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
           </select>
         </div>
         <div class="filter-group">
@@ -504,7 +504,7 @@ body.sin-costos .col-costo { display: none !important; }
         <label>Centro</label>
         <select id="av-centro">
           <option value="">Todos los centros</option>
-          <option>Bella Vista</option><option>San Rafael</option>
+          <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
         </select>
       </div>
       <button class="btn btn-primary" onclick="cargarAvance()">Aplicar</button>
@@ -559,7 +559,7 @@ body.sin-costos .col-costo { display: none !important; }
           <div class="form-group">
             <label>Centro</label>
             <select id="pl-centro">
-              <option>Bella Vista</option><option>San Rafael</option>
+              <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
             </select>
           </div>
           <div class="form-group">
@@ -750,6 +750,15 @@ body.sin-costos .col-costo { display: none !important; }
 
     <!-- Tabla -->
     <div id="aviso-pendientes"></div>
+    <div id="barra-seleccion-emp" style="display:none;background:#DCE9F7;border-radius:8px;padding:10px 14px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:13px;color:#123A66;font-weight:500;"><span id="emp-sel-count">0</span> seleccionado(s)</span>
+      <select id="emp-sel-centro" style="padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+        <option value="">Elegí el centro nuevo...</option>
+        <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="aplicarCentroMasivo()">Cambiar centro a los seleccionados</button>
+      <button class="btn btn-outline btn-sm" onclick="limpiarSeleccionEmp()">Cancelar</button>
+    </div>
     <div class="card">
       <div class="card-header">
         <h2><span id="emp-titulo">Empleados activos</span> (<span id="emp-count">0</span>)</h2>
@@ -759,15 +768,15 @@ body.sin-costos .col-costo { display: none !important; }
           </label>
           <select id="f-emp-centro" onchange="cargarEmpleados()" style="padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;">
             <option value="">Todos los centros</option>
-            <option>Bella Vista</option><option>San Rafael</option>
+            <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
           </select>
-          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [0,1,2])">
+          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [1,2,3])">
         </div>
       </div>
       <div class="table-wrap">
         <table id="tbl-emp">
-          <thead><tr><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
-          <tbody id="body-emp"><tr class="empty-row"><td colspan="8">Cargando...</td></tr></tbody>
+          <thead><tr><th><input type="checkbox" id="chk-todos-emp" onchange="toggleTodosEmp(this.checked)" style="width:auto;"></th><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
+          <tbody id="body-emp"><tr class="empty-row"><td colspan="9">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1130,7 +1139,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia', 'Cambiar centro a los seleccionados'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -1318,10 +1327,10 @@ function abrirCierreManual(sesionId, estadoActual) {
   document.getElementById('cm-grupo-otro').style.display = 'none';
 
   document.getElementById('cm-titulo').textContent = esReintento
-    ? 'Generar / volver a subir el acta PDF'
+    ? 'Generar el acta PDF'
     : 'Cerrar sesión manualmente';
   document.getElementById('cm-descripcion').textContent = esReintento
-    ? 'Esta sesión ya está cerrada pero el PDF no se subió a la nube. Se va a regenerar con los asistentes registrados y volver a intentar la subida.'
+    ? 'El acta se genera sola después de cerrar la sesión en la tablet. Si por algún motivo no llegó a subirse, generála acá con los asistentes ya registrados.'
     : 'Esta sesión quedó abierta. Vas a cerrarla ahora y generar su acta PDF con los asistentes ya registrados.';
   document.getElementById('cm-campo-verif').style.display = esReintento ? 'none' : 'block';
 
@@ -1483,7 +1492,7 @@ async function generarPDFManual(sesion, verif) {
 
   y += 6;
   doc.setFontSize(8); doc.setTextColor(150);
-  doc.text('Cierre administrativo — la sesión fue cerrada manualmente desde el panel de administración.', m, y + 5);
+  doc.text('Acta generada desde el panel de administración (respaldo).', m, y + 5);
   const hash = await sha256(doc.output('arraybuffer'));
   doc.text('Cerrado: ' + new Date().toLocaleString('es-AR'), 210 - m, y + 12, { align: 'right' });
   doc.text('SHA-256: ' + hash.slice(0, 8) + '...' + hash.slice(-4), 210 - m, y + 17, { align: 'right' });
@@ -1909,6 +1918,53 @@ async function exportarExcel() {
 }
 
 // ── EMPLEADOS ──
+// ── SELECCIÓN MÚLTIPLE DE EMPLEADOS (para cambiar el centro en bloque) ──
+let empleadosSeleccionados = new Set();
+
+function toggleSeleccionEmp(id, checked) {
+  if (checked) empleadosSeleccionados.add(id); else empleadosSeleccionados.delete(id);
+  actualizarBarraSeleccionEmp();
+}
+
+function toggleTodosEmp(checked) {
+  document.querySelectorAll('#body-emp .chk-emp').forEach(chk => {
+    chk.checked = checked;
+    if (checked) empleadosSeleccionados.add(chk.value); else empleadosSeleccionados.delete(chk.value);
+  });
+  actualizarBarraSeleccionEmp();
+}
+
+function actualizarBarraSeleccionEmp() {
+  const barra = document.getElementById('barra-seleccion-emp');
+  const n = empleadosSeleccionados.size;
+  document.getElementById('emp-sel-count').textContent = n;
+  barra.style.display = n > 0 ? 'flex' : 'none';
+}
+
+function limpiarSeleccionEmp() {
+  empleadosSeleccionados = new Set();
+  document.getElementById('chk-todos-emp').checked = false;
+  actualizarBarraSeleccionEmp();
+  cargarEmpleados();
+}
+
+async function aplicarCentroMasivo() {
+  if (!requiereEditor()) return;
+  const nuevoCentro = document.getElementById('emp-sel-centro').value;
+  if (!nuevoCentro) { toast('Elegí a qué centro los pasás.'); return; }
+  const ids = [...empleadosSeleccionados];
+  if (!ids.length) { toast('No hay nadie seleccionado.'); return; }
+  if (!confirm('¿Cambiar el centro de ' + ids.length + ' empleado(s) a "' + nuevoCentro + '"?')) return;
+
+  const { error } = await sb.from('empleados').update({ centro: nuevoCentro }).in('id', ids);
+  if (error) { toast('Error: ' + error.message); return; }
+
+  auditar('editar', 'empleado', 'Cambió el centro de ' + ids.length + ' empleado(s) a "' + nuevoCentro + '" (masivo)');
+  toast(ids.length + ' empleado(s) actualizados a ' + nuevoCentro + '.');
+  empleadosSeleccionados = new Set();
+  cargarEmpleados();
+}
+
 async function cargarEmpleados() {
   const verInactivos = document.getElementById('ver-inactivos')?.checked;
   const centroF = document.getElementById('f-emp-centro')?.value || '';
@@ -1924,7 +1980,7 @@ async function cargarEmpleados() {
   if (tituloEl) tituloEl.textContent = verInactivos ? 'Empleados dados de baja' : 'Empleados activos';
   if (!data || !data.length) {
     const msg = verInactivos ? 'No hay empleados dados de baja.' : 'Sin empleados.';
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">' + msg + '</td></tr>';
     return;
   }
 
@@ -1951,6 +2007,7 @@ async function cargarEmpleados() {
     acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarEmp('${e.id}', '${e.nombre.replace(/'/g,'')}')">Eliminar</button>`;
 
     return `<tr ${bg}>
+      <td><input type="checkbox" class="chk-emp" value="${e.id}" onchange="toggleSeleccionEmp('${e.id}', this.checked)" style="width:auto;" ${empleadosSeleccionados.has(e.id) ? 'checked' : ''}></td>
       <td>${e.legajo}</td>
       <td style="font-weight:500;">${e.nombre}${inactivo ? ' <span class="badge badge-gray">Baja</span>' : (e.auto_agregado ? ' <span class="badge badge-yellow">Pendiente</span>' : '')}</td>
       <td>${e.centro||'—'}</td>
@@ -1977,6 +2034,7 @@ async function cargarEmpleados() {
   poblarDatalist('dl-contratos', base.map(e => e.contrato));
   poblarDatalist('dl-generos', base.map(e => e.genero));
   poblarDatalist('dl-convenios', base.map(e => e.convenio));
+  actualizarBarraSeleccionEmp();
 }
 
 function poblarDatalist(datalistId, valoresExistentes, predefinidos = []) {
