@@ -994,6 +994,30 @@ body.sin-costos .col-costo { display: none !important; }
   </div>
 </div>
 
+<!-- MODAL: CONVOCADOS RETROACTIVO -->
+<div class="overlay" id="modal-convocados-retro">
+  <div class="modal">
+    <h3>Agregar convocados (retroactivo)</h3>
+    <p style="font-size:13px;color:#666;margin-bottom:14px;">
+      Usalo cuando la sesión ya pasó sin que se cargaran los convocados en la tablet.
+      Marcá acá a quiénes correspondía convocar — esto NO los marca como presentes,
+      solo restablece el universo esperado para que "Faltantes" vuelva a calcular bien
+      quién asistió y quién no.
+    </p>
+    <input type="hidden" id="cr-sesion-id">
+    <div class="form-group">
+      <label>Buscar empleado</label>
+      <input type="text" id="cr-buscar" placeholder="Nombre o DNI..." oninput="filtrarConvocadosRetro(this.value)">
+    </div>
+    <div id="cr-lista" style="max-height:260px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px;margin-bottom:10px;"></div>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;" id="cr-seleccion">0 seleccionados</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button class="btn btn-outline" onclick="cerrarModalConvocadosRetro()">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarConvocadosRetro()">Agregar como convocados</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: CIERRE MANUAL DE SESIÓN -->
 <div class="overlay" id="modal-cierre-manual">
   <div class="modal">
@@ -1139,7 +1163,7 @@ function aplicarPermisos() {
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia', 'Cambiar centro a los seleccionados'];
+  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia', '+ Convocados', 'Cambiar centro a los seleccionados'];
   document.querySelectorAll('table button, .btn').forEach(b => {
     if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
   });
@@ -1309,6 +1333,7 @@ async function cargarSesiones() {
         ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'abierta')">Cerrar y generar PDF</button>` : ''}
         ${s.estado === 'cerrada' && !s.pdf_url ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'cerrada')">Generar PDF faltante</button>` : ''}
         <button class="btn btn-outline btn-sm" onclick="abrirAsistenciaManual('${s.id}')">+ Asistencia</button>
+        <button class="btn btn-outline btn-sm" onclick="abrirConvocadosRetro('${s.id}')">+ Convocados</button>
         <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
         <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
       </td>
@@ -1600,6 +1625,82 @@ async function confirmarAsistenciaManual() {
   auditar('editar', 'sesion', 'Agregó asistencia manual de ' + amSeleccionados.size + ' persona(s) (corrección) en sesión ' + sesionId);
   cerrarModalAsistenciaManual();
   toast('Asistencia agregada. Los indicadores se van a actualizar.');
+  cargarSesiones();
+}
+
+// ── CONVOCADOS RETROACTIVO (cuando la sesión ya pasó sin cargarlos) ──
+let crEmpleadosTodos = [];
+let crSeleccionados = new Set();
+let crYaConvocados = new Set();
+let crYaAsistieron = new Set();
+
+async function abrirConvocadosRetro(sesionId) {
+  if (!requiereEditor()) return;
+  document.getElementById('cr-sesion-id').value = sesionId;
+  document.getElementById('cr-buscar').value = '';
+  crSeleccionados = new Set();
+
+  const { data: emps } = await sb.from('empleados').select('id, legajo, nombre, sector, centro').eq('activo', true).order('nombre');
+  crEmpleadosTodos = emps || [];
+
+  const { data: conv } = await sb.from('convocados').select('empleado_id').eq('sesion_id', sesionId);
+  crYaConvocados = new Set((conv || []).map(c => c.empleado_id));
+
+  const { data: asis } = await sb.from('asistencias').select('empleado_id').eq('sesion_id', sesionId).eq('anulada', false);
+  crYaAsistieron = new Set((asis || []).map(a => a.empleado_id));
+
+  renderConvocadosRetro('');
+  document.getElementById('modal-convocados-retro').classList.add('open');
+}
+
+function cerrarModalConvocadosRetro() {
+  document.getElementById('modal-convocados-retro').classList.remove('open');
+}
+
+function filtrarConvocadosRetro(q) { renderConvocadosRetro(q); }
+
+function renderConvocadosRetro(q) {
+  let arr = crEmpleadosTodos;
+  if (q) {
+    const ql = q.toLowerCase();
+    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+  }
+  const cont = document.getElementById('cr-lista');
+  if (!arr.length) { cont.innerHTML = '<div style="padding:10px;color:#999;font-size:13px;">Sin resultados.</div>'; return; }
+  cont.innerHTML = arr.map(e => {
+    const yaConvocado = crYaConvocados.has(e.id);
+    const asistio = crYaAsistieron.has(e.id);
+    if (yaConvocado) {
+      return `<div style="padding:8px;display:flex;justify-content:space-between;opacity:0.5;">
+        <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'}</span>
+        <span style="color:#1A6B3C;">✓ ${asistio ? 'asistió' : 'ya convocado'}</span>
+      </div>`;
+    }
+    const sel = crSeleccionados.has(e.id);
+    return `<div onclick="toggleConvocadoRetro('${e.id}')" style="padding:8px;display:flex;justify-content:space-between;cursor:pointer;border-radius:6px;${sel?'background:#E6F4EC;':''}">
+      <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'} ${e.centro?('· '+e.centro):''}</span>
+      <span style="color:${sel?'#1A6B3C':'#ccc'};font-size:16px;">${sel?'☑':'☐'}</span>
+    </div>`;
+  }).join('');
+}
+
+function toggleConvocadoRetro(id) {
+  if (crSeleccionados.has(id)) crSeleccionados.delete(id); else crSeleccionados.add(id);
+  document.getElementById('cr-seleccion').textContent = crSeleccionados.size + ' seleccionados';
+  renderConvocadosRetro(document.getElementById('cr-buscar').value);
+}
+
+async function confirmarConvocadosRetro() {
+  const sesionId = document.getElementById('cr-sesion-id').value;
+  if (!crSeleccionados.size) { toast('Seleccioná al menos un empleado.'); return; }
+
+  const registros = [...crSeleccionados].map(empId => ({ sesion_id: sesionId, empleado_id: empId }));
+  const { error } = await sb.from('convocados').upsert(registros, { onConflict: 'sesion_id,empleado_id' });
+  if (error) { toast('Error al guardar: ' + error.message); return; }
+
+  auditar('editar', 'sesion', 'Agregó ' + crSeleccionados.size + ' convocado(s) retroactivo(s) en sesión ' + sesionId);
+  cerrarModalConvocadosRetro();
+  toast('Convocados agregados. Los faltantes se van a recalcular.');
   cargarSesiones();
 }
 
