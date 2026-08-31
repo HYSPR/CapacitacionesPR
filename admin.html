@@ -606,12 +606,25 @@ body.sin-costos .col-costo { display: none !important; }
   <div class="tab-content" id="t-seguimiento">
     <div class="filters">
       <div class="filter-group">
-        <label>Desde</label>
-        <input type="date" id="f-desde">
+        <label>Año fiscal (Jul–Jun)</label>
+        <select id="f-periodo"></select>
       </div>
       <div class="filter-group">
-        <label>Hasta</label>
-        <input type="date" id="f-hasta">
+        <label>Mes</label>
+        <select id="f-mes">
+          <option value="">Todos los meses</option>
+          <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+          <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+          <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Centro</label>
+        <select id="f-centro">
+          <option value="">Todos los centros</option>
+          <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
+        </select>
       </div>
       <div class="filter-group">
         <label>Sector</label>
@@ -1204,8 +1217,6 @@ let datosGlobales = { sesiones: [], asistencias: [], empleados: [] };
 
 window.addEventListener('load', () => {
   const hoy = new Date();
-  document.getElementById('f-desde').value = hoy.getFullYear() + '-01-01';
-  document.getElementById('f-hasta').value = hoy.toISOString().slice(0,10);
   // Backup: por defecto, del primer día del mes actual a hoy
   const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   const bkDesde = document.getElementById('bk-desde');
@@ -1233,7 +1244,7 @@ function nombrePeriodo(p) { return 'Jul ' + p + ' – Jun ' + (p + 1); }
 function inicializarPeriodos() {
   const actual = periodoActual();
   const opciones = [actual - 1, actual, actual + 1];
-  ['av-periodo', 'pl-periodo', 'pl-filtro-periodo', 'ses-periodo', 'tb-periodo'].forEach(id => {
+  ['av-periodo', 'pl-periodo', 'pl-filtro-periodo', 'ses-periodo', 'tb-periodo', 'f-periodo'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     sel.innerHTML = '';
@@ -1805,23 +1816,38 @@ async function descargarRegistro(path) {
 
 // ── SEGUIMIENTO ──
 async function cargarSeguimiento() {
-  const desde = document.getElementById('f-desde').value;
-  const hasta = document.getElementById('f-hasta').value;
+  const periodo = parseInt(document.getElementById('f-periodo').value) || periodoActual();
+  const mesF = document.getElementById('f-mes').value;
+  const centroF = document.getElementById('f-centro').value;
   const sector = document.getElementById('f-sector').value;
   const tipo = document.getElementById('f-tipo').value;
-  if (!desde || !hasta) { toast('Seleccioná un rango de fechas.'); return; }
 
+  // Rango de fechas: todo el año fiscal, o un solo mes si se eligió uno
+  let desde = periodo + '-07-01';
+  let hasta = (periodo + 1) + '-06-30';
+  if (mesF) {
+    const mes = parseInt(mesF);
+    const anio = anioDeMes(mes, periodo);
+    const ultimoDia = new Date(anio, mes, 0).getDate(); // día 0 del mes siguiente = último día de este mes
+    desde = anio + '-' + String(mes).padStart(2, '0') + '-01';
+    hasta = anio + '-' + String(mes).padStart(2, '0') + '-' + String(ultimoDia).padStart(2, '0');
+  }
+
+  // Si se filtra por centro, incluir también las online (no tienen centro propio,
+  // se filtran después según el centro de quienes efectivamente asistieron)
   let qSes = sb.from('sesiones')
     .select('*, capacitaciones(id, titulo, tipo, duracion_horas)')
     .eq('estado', 'cerrada').gte('fecha', desde).lte('fecha', hasta);
-  const { data: sesiones } = await qSes;
-  const sesIds = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo).map(s => s.id);
+  if (centroF) qSes = qSes.or('centro.eq."' + centroF + '",modalidad.eq.online');
+  const { data: sesRaw } = await qSes;
+  let sesiones = (sesRaw || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo);
+  let sesIds = sesiones.map(s => s.id);
 
   let asistencias = [];
   let convocados = [];
   if (sesIds.length) {
     const { data } = await sb.from('asistencias')
-      .select('*, empleados(id, legajo, nombre, sector, contrato, genero, convenio)')
+      .select('*, empleados(id, legajo, nombre, sector, contrato, genero, convenio, centro)')
       .in('sesion_id', sesIds).eq('anulada', false);
     asistencias = data || [];
     const { data: conv } = await sb.from('convocados')
@@ -1830,12 +1856,29 @@ async function cargarSeguimiento() {
     convocados = conv || [];
   }
 
+  // Las online solo cuentan para este centro si asistió gente de ese centro
+  if (centroF) {
+    const centrosPorSesion = {};
+    asistencias.forEach(a => {
+      const c = a.empleados?.centro;
+      if (!c) return;
+      if (!centrosPorSesion[a.sesion_id]) centrosPorSesion[a.sesion_id] = new Set();
+      centrosPorSesion[a.sesion_id].add(c);
+    });
+    sesiones = sesiones.filter(s => s.centro === centroF
+      || (s.modalidad === 'online' && centrosPorSesion[s.id] && centrosPorSesion[s.id].has(centroF)));
+    const idsOk = new Set(sesiones.map(s => s.id));
+    sesIds = [...idsOk];
+    asistencias = asistencias.filter(a => idsOk.has(a.sesion_id));
+    convocados = convocados.filter(c => idsOk.has(c.sesion_id));
+  }
+
   let qEmp = sb.from('empleados').select('*').eq('activo', true).order('nombre');
   if (sector) qEmp = qEmp.eq('sector', sector);
+  if (centroF) qEmp = qEmp.eq('centro', centroF);
   const { data: empleados } = await qEmp;
 
-  const sesFiltradas = (sesiones || []).filter(s => !tipo || s.capacitaciones?.tipo === tipo);
-  datosGlobales = { sesiones: sesFiltradas, asistencias, convocados, empleados: empleados || [] };
+  datosGlobales = { sesiones, asistencias, convocados, empleados: empleados || [] };
 
   renderPorCurso();
   poblarFiltroFaltantesCurso();
@@ -2012,9 +2055,12 @@ async function exportarExcel() {
   empleados.forEach(emp => { mat.push([emp.legajo, emp.nombre, emp.sector||'', ...caps.map(([cid]) => asiSet[emp.id+'_'+cid] ? 'Si' : '')]); });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mat), 'Matriz');
 
-  const desde = document.getElementById('f-desde').value;
-  const hasta = document.getElementById('f-hasta').value;
-  XLSX.writeFile(wb, 'Capacitaciones_' + desde + '_' + hasta + '.xlsx');
+  const periodo = parseInt(document.getElementById('f-periodo').value) || periodoActual();
+  const mesF = document.getElementById('f-mes').value;
+  const centroF = document.getElementById('f-centro').value;
+  const nombreArchivo = 'Capacitaciones_' + nombrePeriodo(periodo).replace(/\s/g, '')
+    + (mesF ? '_' + MESES[mesF] : '') + (centroF ? '_' + centroF.replace(/\s/g, '') : '') + '.xlsx';
+  XLSX.writeFile(wb, nombreArchivo);
   toast('Excel generado correctamente.');
 }
 
