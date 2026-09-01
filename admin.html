@@ -2872,8 +2872,12 @@ async function backupExcel() {
     let asistencias = { data: [] };
     let convocados = { data: [] };
     if (sesIds.length) {
-      asistencias = await sb.from('asistencias').select('*, empleados(legajo, nombre, sector), sesiones(fecha, centro, capacitaciones(titulo))').in('sesion_id', sesIds);
-      convocados = await sb.from('convocados').select('*, empleados(id, legajo, nombre, sector, activo), sesiones(fecha, centro, capacitaciones(titulo))').in('sesion_id', sesIds);
+      asistencias = await sb.from('asistencias')
+        .select('*, empleados(legajo, nombre, sector, contrato, convenio, genero), sesiones(fecha, centro, modalidad, capacitaciones(titulo, codigo, tipo, duracion_horas, costo))')
+        .in('sesion_id', sesIds);
+      convocados = await sb.from('convocados')
+        .select('*, empleados(id, legajo, nombre, sector, contrato, convenio, genero, activo), sesiones(fecha, centro, modalidad, capacitaciones(titulo, codigo, tipo, duracion_horas, costo))')
+        .in('sesion_id', sesIds);
     }
 
     const wb = XLSX.utils.book_new();
@@ -2884,18 +2888,33 @@ async function backupExcel() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hSes), 'Sesiones');
 
     // Hoja Asistencias
-    const hAsi = [['Fecha','Capacitacion','Centro','Legajo','Nombre','Sector','Hora firma']];
-    (asistencias.data||[]).forEach(a => hAsi.push([formatFecha(a.sesiones?.fecha||''), a.sesiones?.capacitaciones?.titulo||'', a.sesiones?.centro||'', a.empleados?.legajo||'', a.empleados?.nombre||'', a.empleados?.sector||'', a.firmado_at?new Date(a.firmado_at).toLocaleString('es-AR'):'']));
+    const hAsi = [['Fecha','Legajo','Nombre','Sector','Contrato','Convenio','Género','Codigo','Curso','Duracion (hs)','Tipo','Costo','Centro productivo','Hora firma']];
+    (asistencias.data||[]).forEach(a => {
+      const cap = a.sesiones?.capacitaciones;
+      const centroFila = a.sesiones?.centro || (a.sesiones?.modalidad === 'online' ? 'Todas (online)' : '');
+      hAsi.push([
+        formatFecha(a.sesiones?.fecha||''), a.empleados?.legajo||'', a.empleados?.nombre||'',
+        a.empleados?.sector||'', a.empleados?.contrato||'', a.empleados?.convenio||'', a.empleados?.genero||'',
+        cap?.codigo||'', cap?.titulo||'', cap?.duracion_horas ?? '', cap?.tipo||'', cap?.costo ?? '', centroFila,
+        a.firmado_at?new Date(a.firmado_at).toLocaleString('es-AR'):''
+      ]);
+    });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hAsi), 'Asistencias');
 
     // Hoja Ausentes: convocados (activos) que no tienen asistencia registrada en esa sesión
     const asistieronSet = new Set((asistencias.data||[]).map(a => a.sesion_id + '_' + a.empleado_id));
-    const hAus = [['Fecha','Capacitacion','Centro','Legajo','Nombre','Sector']];
+    const hAus = [['Fecha','Legajo','Nombre','Sector','Contrato','Convenio','Género','Codigo','Curso','Duracion (hs)','Tipo','Costo','Centro productivo']];
     (convocados.data||[]).forEach(c => {
       if (!c.empleados || c.empleados.activo === false) return;
       const key = c.sesion_id + '_' + c.empleado_id;
       if (asistieronSet.has(key)) return;
-      hAus.push([formatFecha(c.sesiones?.fecha||''), c.sesiones?.capacitaciones?.titulo||'', c.sesiones?.centro||'', c.empleados?.legajo||'', c.empleados?.nombre||'', c.empleados?.sector||'']);
+      const cap = c.sesiones?.capacitaciones;
+      const centroFila = c.sesiones?.centro || (c.sesiones?.modalidad === 'online' ? 'Todas (online)' : '');
+      hAus.push([
+        formatFecha(c.sesiones?.fecha||''), c.empleados?.legajo||'', c.empleados?.nombre||'',
+        c.empleados?.sector||'', c.empleados?.contrato||'', c.empleados?.convenio||'', c.empleados?.genero||'',
+        cap?.codigo||'', cap?.titulo||'', cap?.duracion_horas ?? '', cap?.tipo||'', cap?.costo ?? '', centroFila
+      ]);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hAus), 'Ausentes');
 
