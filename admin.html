@@ -306,9 +306,9 @@ body.solo-consulta [data-editor] { display: none !important; }
   <div class="nav-tab active" onclick="tab('t-sesiones', this)">Sesiones</div>
   <div class="nav-tab" onclick="tab('t-avance', this)">Avance del plan</div>
   <div class="nav-tab" onclick="tab('t-seguimiento', this)">Seguimiento</div>
-  <div class="nav-tab" data-editor onclick="tab(\'t-plan\', this)">Plan</div>
-  <div class="nav-tab" data-editor onclick="tab(\'t-empleados\', this)">Empleados</div>
-  <div class="nav-tab" data-editor onclick="tab(\'t-cursos\', this)">Cursos</div>
+  <div class="nav-tab" data-editor onclick="tab('t-plan', this)">Plan</div>
+  <div class="nav-tab" data-editor onclick="tab('t-empleados', this)">Empleados</div>
+  <div class="nav-tab" data-editor onclick="tab('t-cursos', this)">Cursos</div>
   <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
   <div class="nav-tab" onclick="tab('t-tablero', this)">KPIs</div>
 </div>
@@ -907,6 +907,17 @@ body.solo-consulta [data-editor] { display: none !important; }
         </p>
         <button class="btn btn-primary" id="bk-btn-pdf" onclick="backupPDFs()">⬇ Descargar todas las actas PDF</button>
         <div id="bk-progreso" style="margin-top:12px;font-size:13px;color:#666;"></div>
+
+        <div class="divider"></div>
+
+        <div class="section-label">3 · Configuración del sistema</div>
+        <p style="font-size:13px;color:#666;margin-bottom:10px;">
+          La nómina completa, el catálogo de capacitaciones y el plan anual de todos los períodos.
+          No depende del rango de fechas. Es lo que se necesita para volver a levantar el sistema
+          desde cero: sin esto habría que recargar el plan y los empleados a mano.
+        </p>
+        <button class="btn btn-outline" id="bk-btn-config" onclick="backupConfig()">⬇ Descargar configuración</button>
+        <div id="bk-progreso-config" style="margin-top:12px;font-size:13px;color:#666;"></div>
       </div>
     </div>
   </div>
@@ -3030,6 +3041,69 @@ async function backupPDFs() {
 
   prog.textContent = '✓ Se descargaron ' + ok + ' de ' + sesiones.length + ' actas.';
   btn.disabled = false;
+}
+
+// Convierte filas de Supabase en matriz para Excel, tomando todas las columnas que existan.
+function filasAHoja(filas, extras) {
+  if (!filas || !filas.length) return [['(sin datos)']];
+  // Las relaciones anidadas se excluyen (se agregan aplanadas vía "extras").
+  // Se marcan mirando todas las filas, porque en algunas puede venir null.
+  const anidadas = new Set();
+  filas.forEach(f => Object.keys(f).forEach(k => {
+    if (typeof f[k] === 'object' && f[k] !== null) anidadas.add(k);
+  }));
+  const claves = [];
+  filas.forEach(f => Object.keys(f).forEach(k => {
+    if (anidadas.has(k)) return;
+    if (!claves.includes(k)) claves.push(k);
+  }));
+  const cabExtra = extras ? Object.keys(extras) : [];
+  const out = [claves.concat(cabExtra)];
+  filas.forEach(f => {
+    const fila = claves.map(k => (f[k] === null || f[k] === undefined) ? '' : f[k]);
+    cabExtra.forEach(c => fila.push(extras[c](f)));
+    out.push(fila);
+  });
+  return out;
+}
+
+async function backupConfig() {
+  const btn = document.getElementById('bk-btn-config');
+  const prog = document.getElementById('bk-progreso-config');
+  btn.disabled = true; btn.textContent = 'Generando...';
+  prog.textContent = '';
+
+  try {
+    const [emps, cursos, plan] = await Promise.all([
+      sb.from('empleados').select('*').order('nombre'),
+      sb.from('capacitaciones').select('*').order('codigo'),
+      sb.from('plan_capacitacion').select('*, capacitaciones(codigo, titulo)').order('periodo').order('mes')
+    ]);
+
+    if (emps.error || cursos.error || plan.error) {
+      throw new Error((emps.error || cursos.error || plan.error).message);
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasAHoja(emps.data)), 'Empleados');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasAHoja(cursos.data)), 'Cursos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasAHoja(plan.data, {
+      'Codigo curso': f => f.capacitaciones?.codigo || '',
+      'Titulo curso': f => f.capacitaciones?.titulo || ''
+    })), 'Plan anual');
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, 'Configuracion_Capacitaciones_' + hoy + '.xlsx');
+
+    prog.textContent = '✓ ' + (emps.data || []).length + ' empleados · ' +
+      (cursos.data || []).length + ' cursos · ' + (plan.data || []).length + ' líneas de plan.';
+  } catch (err) {
+    prog.textContent = 'Error: ' + err.message;
+    toast('Error al generar la configuración: ' + err.message);
+  }
+
+  btn.disabled = false; btn.textContent = '⬇ Descargar configuración';
 }
 
 // ── TABLERO ──
