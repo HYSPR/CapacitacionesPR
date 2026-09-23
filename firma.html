@@ -537,7 +537,33 @@ async function cargarCaps() {
     o.textContent = (c.codigo ? c.codigo + ' · ' : '') + c.titulo + ' · ' + c.tipo;
     sel.appendChild(o);
   });
-  mostrar('p-inicio');
+  await intentarRetomarSesion();
+}
+
+// Si tocaron mal y el navegador fue "para atrás" (o un deslizar de dedo lo
+// interpretó como volver), la app se recarga y se perdía la sesión abierta:
+// el instructor tenía que abrirla de nuevo, lo que creaba una sesión
+// duplicada en vez de seguir en la misma. Ahora, al abrir una sesión se
+// guarda su id en este navegador/pestaña, y acá se intenta retomarla en vez
+// de mostrar el formulario de "abrir sesión" de nuevo.
+async function intentarRetomarSesion() {
+  const idGuardado = sessionStorage.getItem('sesion_activa_id');
+  if (!idGuardado) { mostrar('p-inicio'); return; }
+
+  const { data, error } = await sb.from('sesiones')
+    .select('*, capacitaciones(titulo, tipo, duracion_horas, codigo, responsable)')
+    .eq('id', idGuardado)
+    .single();
+
+  // Si ya no existe o ya se cerró (se generó el acta), no hay nada que retomar.
+  if (error || !data || data.estado === 'cerrada') {
+    sessionStorage.removeItem('sesion_activa_id');
+    mostrar('p-inicio');
+    return;
+  }
+
+  toast('Se retomó la sesión que había quedado abierta.');
+  await entrarASesion(data);
 }
 
 function mostrar(id) {
@@ -643,26 +669,60 @@ async function abrirSesion() {
 
   if (error) { toast('Error al crear la sesión.'); btn.disabled = false; btn.textContent = 'Abrir sesión y empezar'; return; }
 
+  // Guardamos el id de la sesión recién abierta en este navegador/pestaña. Si
+  // más adelante la app se recarga sola (por un toque accidental que navegó
+  // "para atrás"), esto permite retomar esta misma sesión en vez de crear una
+  // nueva y duplicada.
+  sessionStorage.setItem('sesion_activa_id', data.id);
+
+  // Resetear la opción de continuación para la próxima
+  document.getElementById('inp-es-continuacion').checked = false;
+  document.getElementById('grupo-continuacion').style.display = 'none';
+
+  await entrarASesion(data);
+
+  btn.disabled = false; btn.textContent = 'Abrir sesión y empezar';
+}
+
+// Deja todo listo para trabajar en una sesión: la nueva recién creada, o una
+// ya existente que se está retomando después de un cierre accidental de la
+// app. Recupera de la base lo que ya se firmó/convocó en ESTA sesión, para
+// no perder ni duplicar nada.
+async function entrarASesion(data) {
   sesion = data;
-  esOnline = online;
+  const centro = data.centro || '';
+  esOnline = (data.modalidad === 'online');
   document.getElementById('h-titulo').textContent = data.capacitaciones.titulo;
-  document.getElementById('h-meta').textContent = formatFecha(fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro) + ' · ' + inst;
+  document.getElementById('h-meta').textContent = formatFecha(data.fecha) + ' · ' + (esOnline ? 'Online · Todas las plantas' : centro) + ' · ' + (data.instructor || '');
 
   const { data: emps } = await sb.from('empleados').select('*').eq('activo', true).order('nombre');
   // Online y Administración: puede firmar cualquiera, sin importar su centro de ficha.
   // El resto de los centros (Bella Vista, San Rafael) sí filtran solo a su gente.
   const sinFiltroDeCentro = esOnline || centro === 'Administración';
   empleados = sinFiltroDeCentro ? (emps || []) : (emps || []).filter(e => !e.centro || e.centro === centro);
+
   firmados = new Set();
   convocados = new Set();
+  yaAsistieronAntes = new Set();
+  presentesOnline = new Set();
+
+  // Lo que ya se firmó/convocó en ESTA sesión (si se está retomando, puede
+  // que ya haya gente cargada de antes de que se recargara la página).
+  const { data: asisActuales } = await sb.from('asistencias')
+    .select('empleado_id').eq('sesion_id', data.id).eq('anulada', false);
+  (asisActuales || []).forEach(a => { firmados.add(a.empleado_id); convocados.add(a.empleado_id); });
+  if (esOnline) presentesOnline = new Set(firmados);
+
+  const { data: convActuales } = await sb.from('convocados').select('empleado_id').eq('sesion_id', data.id);
+  (convActuales || []).forEach(c => convocados.add(c.empleado_id));
 
   // Si es continuación, procesar las jornadas anteriores
-  yaAsistieronAntes = new Set();
+  const madreId = data.sesion_madre_id || null;
   if (madreId) {
     // Todas las sesiones del grupo: la madre + sus continuaciones (menos la actual)
     const { data: hermanas } = await sb.from('sesiones')
       .select('id').or(`id.eq.${madreId},sesion_madre_id.eq.${madreId}`);
-    const hermanasIds = (hermanas || []).map(h => h.id).filter(id => id !== sesion.id);
+    const hermanasIds = (hermanas || []).map(h => h.id).filter(id => id !== data.id);
     if (hermanasIds.length) {
       // Quiénes ya firmaron en jornadas anteriores → bloqueados
       const { data: asisPrevias } = await sb.from('asistencias')
@@ -675,9 +735,9 @@ async function abrirSesion() {
       const convocadosPrevios = new Set((convPrevios || []).map(c => c.empleado_id));
 
       // Pendientes = convocados antes que NO firmaron → se pre-cargan como convocados de esta jornada
-      const pendientes = [...convocadosPrevios].filter(id => !yaAsistieronAntes.has(id));
+      const pendientes = [...convocadosPrevios].filter(id => !yaAsistieronAntes.has(id) && !convocados.has(id));
       if (pendientes.length) {
-        const nuevos = pendientes.map(id => ({ sesion_id: sesion.id, empleado_id: id }));
+        const nuevos = pendientes.map(id => ({ sesion_id: data.id, empleado_id: id }));
         await sb.from('convocados').upsert(nuevos, { onConflict: 'sesion_id,empleado_id' });
         pendientes.forEach(id => convocados.add(id));
       }
@@ -689,11 +749,6 @@ async function abrirSesion() {
   // Poblar el desplegable de sectores del auto-agregado con los sectores reales
   poblarSectoresAutoAgregar(emps || []);
 
-  // Resetear la opción de continuación para la próxima
-  document.getElementById('inp-es-continuacion').checked = false;
-  document.getElementById('grupo-continuacion').style.display = 'none';
-
-  btn.disabled = false; btn.textContent = 'Abrir sesión y empezar';
   mostrar('p-buscar');
 }
 
@@ -1208,6 +1263,9 @@ async function cerrarSesion() {
 
     const { error: updErr } = await sb.from('sesiones').update(datosCierre).eq('id', sesionIdCerrada);
     if (updErr) { toast('No se pudo cerrar la sesión: ' + updErr.message); return; }
+
+    // Ya se cerró: no hay que retomarla si la app se recarga.
+    sessionStorage.removeItem('sesion_activa_id');
 
     cerrarModal();
     document.getElementById('footer-bar').style.display = 'none';
