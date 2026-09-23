@@ -129,6 +129,10 @@ tr:hover td { background: #fafeff; }
 #usuario-header { font-size: 12px; color: rgba(255,255,255,0.85); }
 /* Los costos solo los ven los editores */
 body.sin-costos .col-costo { display: none !important; }
+/* Modo consulta: se oculta todo lo marcado como data-editor.
+   Se hace por atributo (no por el texto del boton) para que siga
+   funcionando aunque se cambie el idioma o el texto de un boton. */
+body.solo-consulta [data-editor] { display: none !important; }
 
 /* ── TABLERO ── */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -302,9 +306,9 @@ body.sin-costos .col-costo { display: none !important; }
   <div class="nav-tab active" onclick="tab('t-sesiones', this)">Sesiones</div>
   <div class="nav-tab" onclick="tab('t-avance', this)">Avance del plan</div>
   <div class="nav-tab" onclick="tab('t-seguimiento', this)">Seguimiento</div>
-  <div class="nav-tab" onclick="tab('t-plan', this)">Plan</div>
-  <div class="nav-tab" onclick="tab('t-empleados', this)">Empleados</div>
-  <div class="nav-tab" onclick="tab('t-cursos', this)">Cursos</div>
+  <div class="nav-tab" data-editor onclick="tab(\'t-plan\', this)">Plan</div>
+  <div class="nav-tab" data-editor onclick="tab(\'t-empleados\', this)">Empleados</div>
+  <div class="nav-tab" data-editor onclick="tab(\'t-cursos\', this)">Cursos</div>
   <div class="nav-tab" onclick="tab('t-backup', this)">Backup</div>
   <div class="nav-tab" onclick="tab('t-tablero', this)">KPIs</div>
 </div>
@@ -543,7 +547,7 @@ body.sin-costos .col-costo { display: none !important; }
 
   <!-- ══ TAB: PLAN ══ -->
   <div class="tab-content" id="t-plan">
-    <div class="card">
+    <div class="card" data-editor>
       <div class="card-header">
         <h2>Planificar capacitación</h2>
       </div>
@@ -584,7 +588,7 @@ body.sin-costos .col-costo { display: none !important; }
             Este centro implica parada de línea para este curso
           </label>
         </div>
-        <button class="btn btn-primary" onclick="agregarPlan()">+ Agregar al plan</button>
+        <button data-editor class="btn btn-primary" onclick="agregarPlan()">+ Agregar al plan</button>
       </div>
     </div>
 
@@ -703,7 +707,7 @@ body.sin-costos .col-costo { display: none !important; }
   <!-- ══ TAB: EMPLEADOS ══ -->
   <div class="tab-content" id="t-empleados">
     <!-- Carga masiva -->
-    <div class="card">
+    <div class="card" data-editor>
       <div class="card-header">
         <h2>Carga masiva desde Excel</h2>
         <button class="btn btn-outline btn-sm" onclick="descargarPlantilla()">⬇ Descargar plantilla</button>
@@ -715,13 +719,13 @@ body.sin-costos .col-costo { display: none !important; }
         </p>
         <input type="file" id="file-masivo" accept=".xlsx,.xls,.csv"
                style="font-size:13px;margin-bottom:12px;display:block;">
-        <button class="btn btn-success" onclick="procesarMasivo()">Procesar archivo</button>
+        <button data-editor class="btn btn-success" onclick="procesarMasivo()">Procesar archivo</button>
         <div id="masivo-resultado" style="margin-top:12px;font-size:13px;"></div>
       </div>
     </div>
 
     <!-- Alta individual -->
-    <div class="card">
+    <div class="card" data-editor>
       <div class="card-header"><h2>Agregar empleado individual</h2></div>
       <div class="card-body">
         <div class="form-row">
@@ -757,20 +761,20 @@ body.sin-costos .col-costo { display: none !important; }
             <datalist id="dl-convenios"></datalist>
           </div>
         </div>
-        <button class="btn btn-primary" onclick="agregarEmpleado()">+ Agregar empleado</button>
+        <button data-editor class="btn btn-primary" onclick="agregarEmpleado()">+ Agregar empleado</button>
       </div>
     </div>
 
     <!-- Tabla -->
     <div id="aviso-pendientes"></div>
-    <div id="barra-seleccion-emp" style="display:none;background:#DCE9F7;border-radius:8px;padding:10px 14px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div id="barra-seleccion-emp" data-editor style="display:none;background:#DCE9F7;border-radius:8px;padding:10px 14px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="font-size:13px;color:#123A66;font-weight:500;"><span id="emp-sel-count">0</span> seleccionado(s)</span>
       <select id="emp-sel-centro" style="padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
         <option value="">Elegí el centro nuevo...</option>
         <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
       </select>
-      <button class="btn btn-primary btn-sm" onclick="aplicarCentroMasivo()">Cambiar centro a los seleccionados</button>
-      <button class="btn btn-outline btn-sm" onclick="limpiarSeleccionEmp()">Cancelar</button>
+      <button data-editor class="btn btn-primary btn-sm" onclick="aplicarCentroMasivo()">Cambiar centro a los seleccionados</button>
+      <button data-editor class="btn btn-outline btn-sm" onclick="limpiarSeleccionEmp()">Cancelar</button>
     </div>
     <div class="card">
       <div class="card-header">
@@ -788,7 +792,7 @@ body.sin-costos .col-costo { display: none !important; }
       </div>
       <div class="table-wrap">
         <table id="tbl-emp">
-          <thead><tr><th><input type="checkbox" id="chk-todos-emp" onchange="toggleTodosEmp(this.checked)" style="width:auto;"></th><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
+          <thead><tr><th data-editor><input type="checkbox" id="chk-todos-emp" onchange="toggleTodosEmp(this.checked)" style="width:auto;"></th><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
           <tbody id="body-emp"><tr class="empty-row"><td colspan="9">Cargando...</td></tr></tbody>
         </table>
       </div>
@@ -798,7 +802,7 @@ body.sin-costos .col-costo { display: none !important; }
   <!-- ══ TAB: CURSOS ══ -->
   <div class="tab-content" id="t-cursos">
     <!-- Carga masiva -->
-    <div class="card">
+    <div class="card" data-editor>
       <div class="card-header">
         <h2>Carga masiva desde Excel</h2>
         <button class="btn btn-outline btn-sm" onclick="descargarPlantillaCursos()">⬇ Descargar plantilla</button>
@@ -810,13 +814,13 @@ body.sin-costos .col-costo { display: none !important; }
         </p>
         <input type="file" id="file-masivo-cursos" accept=".xlsx,.xls,.csv"
                style="font-size:13px;margin-bottom:12px;display:block;">
-        <button class="btn btn-success" onclick="procesarMasivoCursos()">Procesar archivo</button>
+        <button data-editor class="btn btn-success" onclick="procesarMasivoCursos()">Procesar archivo</button>
         <div id="masivo-cursos-resultado" style="margin-top:12px;font-size:13px;"></div>
       </div>
     </div>
 
     <!-- Alta individual -->
-    <div class="card">
+    <div class="card" data-editor>
       <div class="card-header"><h2>Agregar capacitación individual</h2></div>
       <div class="card-body">
         <div class="form-group"><label>Título *</label><input type="text" id="c-titulo" placeholder="Ej: BPM avanzado"></div>
@@ -843,7 +847,7 @@ body.sin-costos .col-costo { display: none !important; }
           <label>Costo total del curso ($)</label>
           <input type="number" id="c-costo" placeholder="0" step="0.01" min="0">
         </div>
-        <button class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
+        <button data-editor class="btn btn-primary" onclick="agregarCurso()">+ Agregar capacitación</button>
       </div>
     </div>
 
@@ -944,7 +948,7 @@ body.sin-costos .col-costo { display: none !important; }
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
       <button class="btn btn-outline" onclick="cerrarModalEmp()">Cancelar</button>
-      <button class="btn btn-primary" onclick="guardarEmp()">Guardar cambios</button>
+      <button data-editor class="btn btn-primary" onclick="guardarEmp()">Guardar cambios</button>
     </div>
   </div>
 </div>
@@ -980,7 +984,7 @@ body.sin-costos .col-costo { display: none !important; }
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
       <button class="btn btn-outline" onclick="cerrarModalCurso()">Cancelar</button>
-      <button class="btn btn-primary" onclick="guardarCurso()">Guardar cambios</button>
+      <button data-editor class="btn btn-primary" onclick="guardarCurso()">Guardar cambios</button>
     </div>
   </div>
 </div>
@@ -1010,23 +1014,27 @@ body.sin-costos .col-costo { display: none !important; }
 <!-- MODAL: CONVOCADOS RETROACTIVO -->
 <div class="overlay" id="modal-convocados-retro">
   <div class="modal">
-    <h3>Agregar convocados (retroactivo)</h3>
+    <h3>Editar convocados</h3>
     <p style="font-size:13px;color:#666;margin-bottom:14px;">
-      Usalo cuando la sesión ya pasó sin que se cargaran los convocados en la tablet.
-      Marcá acá a quiénes correspondía convocar — esto NO los marca como presentes,
-      solo restablece el universo esperado para que "Faltantes" vuelva a calcular bien
-      quién asistió y quién no.
+      Ajustá quiénes correspondía convocar a esta sesión. Tildá para <b>agregar</b> a quien
+      falte, o tocá a un convocado para <b>quitarlo</b> si al final no tenía que estar.
+      Esto no marca presentes a nadie: solo corrige el universo esperado para que
+      "Faltantes" calcule bien. Quien ya firmó no se puede quitar.
     </p>
     <input type="hidden" id="cr-sesion-id">
     <div class="form-group">
       <label>Buscar empleado</label>
       <input type="text" id="cr-buscar" placeholder="Nombre o DNI..." oninput="filtrarConvocadosRetro(this.value)">
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button type="button" class="btn btn-outline btn-sm" id="cr-tab-todos" onclick="crSetVista('todos')">Todos</button>
+      <button type="button" class="btn btn-outline btn-sm" id="cr-tab-conv" onclick="crSetVista('convocados')">Solo convocados</button>
+    </div>
     <div id="cr-lista" style="max-height:260px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px;margin-bottom:10px;"></div>
-    <p style="font-size:12px;color:#888;margin-bottom:12px;" id="cr-seleccion">0 seleccionados</p>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;" id="cr-seleccion">0 para agregar · 0 para quitar</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <button class="btn btn-outline" onclick="cerrarModalConvocadosRetro()">Cancelar</button>
-      <button class="btn btn-success" onclick="confirmarConvocadosRetro()">Agregar como convocados</button>
+      <button class="btn btn-success" onclick="confirmarConvocadosRetro()">Guardar cambios</button>
     </div>
   </div>
 </div>
@@ -1148,44 +1156,24 @@ function aplicarPermisos() {
   if (!usuarioActual) return;
   const esConsulta = usuarioActual.rol !== 'editor';
   const cont = document.getElementById('usuario-header');
-  if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' · solo consulta' : ' · editor');
+  if (cont) cont.textContent = usuarioActual.nombre + (esConsulta ? ' \u00b7 solo consulta' : ' \u00b7 editor');
+
+  // Todo lo marcado con data-editor en el HTML se oculta para consulta.
+  // Al ser CSS sobre un atributo, cubre tambien los botones que se generan
+  // dinamicamente en las tablas, sin necesidad de revisarlos periodicamente.
+  document.body.classList.toggle('solo-consulta', esConsulta);
 
   // Los costos (columnas y KPI) solo se muestran a editores
   document.body.classList.toggle('sin-costos', esConsulta);
-
-  if (!esConsulta) return;
-
-  // Estas pestañas son de gestión pura: no aportan nada a quien solo consulta
-  const pestañasAOcultar = ['Plan', 'Empleados', 'Cursos'];
-  document.querySelectorAll('.nav-tab').forEach(t => {
-    if (pestañasAOcultar.includes(t.textContent.trim())) t.style.display = 'none';
-  });
-
-  // Ocultar las tarjetas de alta/carga (las que contienen estos títulos)
-  const titulosAOcultar = ['Planificar capacitación', 'Carga masiva desde Excel',
-    'Agregar empleado individual', 'Agregar capacitación individual'];
-  document.querySelectorAll('.card').forEach(card => {
-    const h2 = card.querySelector('.card-header h2, h2');
-    if (h2 && titulosAOcultar.some(t => h2.textContent.includes(t))) {
-      card.style.display = 'none';
-    }
-  });
 
   ocultarBotonesAccion();
 }
 
 function ocultarBotonesAccion() {
   if (!usuarioActual || usuarioActual.rol === 'editor') return;
-  const textos = ['Editar', 'Eliminar', 'Quitar', 'Dar de baja', 'Reactivar', 'Desactivar', 'Validar', 'Vincular', '+ Agregar', 'Guardar', 'Cerrar y generar PDF', 'Generar PDF faltante', '+ Asistencia', '+ Convocados', 'Cambiar centro a los seleccionados'];
-  document.querySelectorAll('table button, .btn').forEach(b => {
-    if (textos.some(t => b.textContent.trim().includes(t))) b.style.display = 'none';
-  });
-  // Los campos de justificación editables quedan de solo lectura
+  // Los campos editables dentro de tablas (justificaciones) quedan de solo lectura
   document.querySelectorAll('#avance-wrap input, table input').forEach(i => i.setAttribute('readonly', 'true'));
 }
-
-// Reaplica el ocultamiento cuando cambian las tablas (los botones se regeneran al recargar)
-setInterval(() => { if (usuarioActual && usuarioActual.rol !== 'editor') ocultarBotonesAccion(); }, 1500);
 
 // Registrar una acción en la auditoría
 async function auditar(accion, entidad, descripcion) {
@@ -1341,12 +1329,12 @@ async function cargarSesiones() {
       <td>${badge}${s.sesion_madre_id ? ' <span class="badge badge-blue" title="Es continuación de otra jornada">↳ jornada</span>' : ''}${s.modalidad === 'online' ? ' <span class="badge badge-gray" title="Capacitación online">💻 online</span>' : ''}</td>
       <td>${pdf}${registro}</td>
       <td>
-        ${s.estado === 'abierta' ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'abierta')">Cerrar y generar PDF</button>` : ''}
-        ${s.estado === 'cerrada' && !s.pdf_url ? `<button class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'cerrada')">Generar PDF faltante</button>` : ''}
-        <button class="btn btn-outline btn-sm" onclick="abrirAsistenciaManual('${s.id}')">+ Asistencia</button>
-        <button class="btn btn-outline btn-sm" onclick="abrirConvocadosRetro('${s.id}')">+ Convocados</button>
-        <button class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
-        <button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
+        ${s.estado === 'abierta' ? `<button data-editor class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'abierta')">Cerrar y generar PDF</button>` : ''}
+        ${s.estado === 'cerrada' && !s.pdf_url ? `<button data-editor class="btn btn-success btn-sm" onclick="abrirCierreManual('${s.id}', 'cerrada')">Generar PDF faltante</button>` : ''}
+        <button data-editor class="btn btn-outline btn-sm" onclick="abrirAsistenciaManual('${s.id}')">+ Asistencia</button>
+        <button data-editor class="btn btn-outline btn-sm" onclick="abrirConvocadosRetro('${s.id}')">Convocados</button>
+        <button data-editor class="btn btn-outline btn-sm" onclick="abrirVincular('${s.id}','${s.capacitacion_id}','${s.centro||''}',${s.sesion_madre_id ? `'${s.sesion_madre_id}'` : 'null'})">Vincular</button>
+        <button data-editor class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarSesion('${s.id}', '${(s.capacitaciones?.titulo || '').replace(/'/g,'')}', ${n})">Eliminar</button>
       </td>
     </tr>`;
   }).join('');
@@ -1378,6 +1366,7 @@ function cerrarModalCierreManual() {
 }
 
 async function confirmarCierreManual() {
+  if (!requiereEditor()) return;
   const sesionId = document.getElementById('cm-sesion-id').value;
   const esReintento = document.getElementById('modal-cierre-manual').dataset.reintento === '1';
 
@@ -1620,6 +1609,7 @@ function toggleAsistenciaManual(id) {
 }
 
 async function confirmarAsistenciaManual() {
+  if (!requiereEditor()) return;
   const sesionId = document.getElementById('am-sesion-id').value;
   if (!amSeleccionados.size) { toast('Seleccioná al menos un empleado.'); return; }
 
@@ -1642,14 +1632,18 @@ async function confirmarAsistenciaManual() {
 // ── CONVOCADOS RETROACTIVO (cuando la sesión ya pasó sin cargarlos) ──
 let crEmpleadosTodos = [];
 let crSeleccionados = new Set();
+let crParaQuitar = new Set();
 let crYaConvocados = new Set();
 let crYaAsistieron = new Set();
+let crVista = 'todos';
 
 async function abrirConvocadosRetro(sesionId) {
   if (!requiereEditor()) return;
   document.getElementById('cr-sesion-id').value = sesionId;
   document.getElementById('cr-buscar').value = '';
   crSeleccionados = new Set();
+  crParaQuitar = new Set();
+  crVista = 'todos';
 
   const { data: emps } = await sb.from('empleados').select('id, legajo, nombre, sector, centro').eq('activo', true).order('nombre');
   crEmpleadosTodos = emps || [];
@@ -1660,8 +1654,31 @@ async function abrirConvocadosRetro(sesionId) {
   const { data: asis } = await sb.from('asistencias').select('empleado_id').eq('sesion_id', sesionId).eq('anulada', false);
   crYaAsistieron = new Set((asis || []).map(a => a.empleado_id));
 
+  crActualizarContador();
+  crPintarTabs();
   renderConvocadosRetro('');
   document.getElementById('modal-convocados-retro').classList.add('open');
+}
+
+function crSetVista(v) {
+  crVista = v;
+  crPintarTabs();
+  renderConvocadosRetro(document.getElementById('cr-buscar').value);
+}
+
+function crPintarTabs() {
+  const a = document.getElementById('cr-tab-todos');
+  const b = document.getElementById('cr-tab-conv');
+  if (!a || !b) return;
+  const on = 'background:#1A6B3C;color:#fff;border-color:#1A6B3C;';
+  a.style.cssText = crVista === 'todos' ? on : '';
+  b.style.cssText = crVista === 'convocados' ? on : '';
+  b.textContent = 'Solo convocados (' + crYaConvocados.size + ')';
+}
+
+function crActualizarContador() {
+  const el = document.getElementById('cr-seleccion');
+  if (el) el.textContent = crSeleccionados.size + ' para agregar · ' + crParaQuitar.size + ' para quitar';
 }
 
 function cerrarModalConvocadosRetro() {
@@ -1676,20 +1693,35 @@ function renderConvocadosRetro(q) {
     const ql = q.toLowerCase();
     arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
   }
+  if (crVista === 'convocados') arr = arr.filter(e => crYaConvocados.has(e.id));
   const cont = document.getElementById('cr-lista');
   if (!arr.length) { cont.innerHTML = '<div style="padding:10px;color:#999;font-size:13px;">Sin resultados.</div>'; return; }
   cont.innerHTML = arr.map(e => {
     const yaConvocado = crYaConvocados.has(e.id);
     const asistio = crYaAsistieron.has(e.id);
-    if (yaConvocado) {
-      return `<div style="padding:8px;display:flex;justify-content:space-between;opacity:0.5;">
-        <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'}</span>
-        <span style="color:#1A6B3C;">✓ ${asistio ? 'asistió' : 'ya convocado'}</span>
+    const datos = `${e.nombre} · ${e.legajo} · ${e.sector||'—'}${e.centro?(' · '+e.centro):''}`;
+
+    // Ya convocado Y ya firmó: no se puede tocar.
+    if (yaConvocado && asistio) {
+      return `<div style="padding:8px;display:flex;justify-content:space-between;gap:8px;opacity:0.55;">
+        <span>${datos}</span>
+        <span style="color:#1A6B3C;white-space:nowrap;">✓ asistió</span>
       </div>`;
     }
+
+    // Ya convocado sin firmar: se puede marcar para quitar.
+    if (yaConvocado) {
+      const quitar = crParaQuitar.has(e.id);
+      return `<div onclick="toggleQuitarConvocado('${e.id}')" style="padding:8px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;border-radius:6px;${quitar?'background:#FDECEC;':''}">
+        <span style="${quitar?'text-decoration:line-through;color:#B3261E;':''}">${datos}</span>
+        <span style="white-space:nowrap;color:${quitar?'#B3261E':'#1A6B3C'};">${quitar?'✕ se quita':'✓ convocado · quitar'}</span>
+      </div>`;
+    }
+
+    // No convocado: se puede agregar.
     const sel = crSeleccionados.has(e.id);
-    return `<div onclick="toggleConvocadoRetro('${e.id}')" style="padding:8px;display:flex;justify-content:space-between;cursor:pointer;border-radius:6px;${sel?'background:#E6F4EC;':''}">
-      <span>${e.nombre} · ${e.legajo} · ${e.sector||'—'} ${e.centro?('· '+e.centro):''}</span>
+    return `<div onclick="toggleConvocadoRetro('${e.id}')" style="padding:8px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;border-radius:6px;${sel?'background:#E6F4EC;':''}">
+      <span>${datos}</span>
       <span style="color:${sel?'#1A6B3C':'#ccc'};font-size:16px;">${sel?'☑':'☐'}</span>
     </div>`;
   }).join('');
@@ -1697,21 +1729,49 @@ function renderConvocadosRetro(q) {
 
 function toggleConvocadoRetro(id) {
   if (crSeleccionados.has(id)) crSeleccionados.delete(id); else crSeleccionados.add(id);
-  document.getElementById('cr-seleccion').textContent = crSeleccionados.size + ' seleccionados';
+  crActualizarContador();
+  renderConvocadosRetro(document.getElementById('cr-buscar').value);
+}
+
+function toggleQuitarConvocado(id) {
+  if (crYaAsistieron.has(id)) { toast('No se puede quitar: ya firmó la asistencia.'); return; }
+  if (crParaQuitar.has(id)) crParaQuitar.delete(id); else crParaQuitar.add(id);
+  crActualizarContador();
   renderConvocadosRetro(document.getElementById('cr-buscar').value);
 }
 
 async function confirmarConvocadosRetro() {
+  if (!requiereEditor()) return;
   const sesionId = document.getElementById('cr-sesion-id').value;
-  if (!crSeleccionados.size) { toast('Seleccioná al menos un empleado.'); return; }
+  if (!crSeleccionados.size && !crParaQuitar.size) { toast('No marcaste ningún cambio.'); return; }
 
-  const registros = [...crSeleccionados].map(empId => ({ sesion_id: sesionId, empleado_id: empId }));
-  const { error } = await sb.from('convocados').upsert(registros, { onConflict: 'sesion_id,empleado_id' });
-  if (error) { toast('Error al guardar: ' + error.message); return; }
+  // Seguro extra: nunca quitar a alguien que firmó.
+  const aQuitar = [...crParaQuitar].filter(id => !crYaAsistieron.has(id));
 
-  auditar('editar', 'sesion', 'Agregó ' + crSeleccionados.size + ' convocado(s) retroactivo(s) en sesión ' + sesionId);
+  if (aQuitar.length) {
+    const nombres = aQuitar.map(id => (crEmpleadosTodos.find(e => e.id === id) || {}).nombre || id);
+    const lista = nombres.slice(0, 8).join('\n• ') + (nombres.length > 8 ? '\n• …y ' + (nombres.length - 8) + ' más' : '');
+    if (!confirm('Vas a quitar de convocados a ' + aQuitar.length + ' persona(s):\n\n• ' + lista + '\n\n¿Confirmás?')) return;
+  }
+
+  if (crSeleccionados.size) {
+    const registros = [...crSeleccionados].map(empId => ({ sesion_id: sesionId, empleado_id: empId }));
+    const { error } = await sb.from('convocados').upsert(registros, { onConflict: 'sesion_id,empleado_id' });
+    if (error) { toast('Error al agregar: ' + error.message); return; }
+  }
+
+  if (aQuitar.length) {
+    const { error } = await sb.from('convocados').delete().eq('sesion_id', sesionId).in('empleado_id', aQuitar);
+    if (error) { toast('Error al quitar: ' + error.message); return; }
+  }
+
+  const partes = [];
+  if (crSeleccionados.size) partes.push('agregó ' + crSeleccionados.size);
+  if (aQuitar.length) partes.push('quitó ' + aQuitar.length);
+  auditar('editar', 'sesion', 'Convocados sesión ' + sesionId + ': ' + partes.join(' y ') + ' convocado(s)');
+
   cerrarModalConvocadosRetro();
-  toast('Convocados agregados. Los faltantes se van a recalcular.');
+  toast('Convocados actualizados. Los faltantes se van a recalcular.');
   cargarSesiones();
 }
 
@@ -2145,16 +2205,16 @@ async function cargarEmpleados() {
     const bg = inactivo ? 'style="background:#F5F5F5;opacity:0.7;"' : (e.auto_agregado ? 'style="background:#FEFCE8;"' : '');
     let acciones = '';
     if (inactivo) {
-      acciones = `<button class="btn btn-success btn-sm" onclick="reactivarEmp('${e.id}')">Reactivar</button> `;
+      acciones = `<button data-editor class="btn btn-success btn-sm" onclick="reactivarEmp('${e.id}')">Reactivar</button> `;
     } else {
-      if (e.auto_agregado) acciones += `<button class="btn btn-success btn-sm" onclick="validarEmp('${e.id}')">Validar</button> `;
-      acciones += `<button class="btn btn-outline btn-sm" onclick="editarEmp('${e.id}')">Editar</button> `;
-      acciones += `<button class="btn btn-outline btn-sm" onclick="darBajaEmp('${e.id}')">Dar de baja</button> `;
+      if (e.auto_agregado) acciones += `<button data-editor class="btn btn-success btn-sm" onclick="validarEmp('${e.id}')">Validar</button> `;
+      acciones += `<button data-editor class="btn btn-outline btn-sm" onclick="editarEmp('${e.id}')">Editar</button> `;
+      acciones += `<button data-editor class="btn btn-outline btn-sm" onclick="darBajaEmp('${e.id}')">Dar de baja</button> `;
     }
-    acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarEmp('${e.id}', '${e.nombre.replace(/'/g,'')}')">Eliminar</button>`;
+    acciones += `<button data-editor class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarEmp('${e.id}', '${e.nombre.replace(/'/g,'')}')">Eliminar</button>`;
 
     return `<tr ${bg}>
-      <td><input type="checkbox" class="chk-emp" value="${e.id}" onchange="toggleSeleccionEmp('${e.id}', this.checked)" style="width:auto;" ${empleadosSeleccionados.has(e.id) ? 'checked' : ''}></td>
+      <td data-editor><input type="checkbox" class="chk-emp" value="${e.id}" onchange="toggleSeleccionEmp('${e.id}', this.checked)" style="width:auto;" ${empleadosSeleccionados.has(e.id) ? 'checked' : ''}></td>
       <td>${e.legajo}</td>
       <td style="font-weight:500;">${e.nombre}${inactivo ? ' <span class="badge badge-gray">Baja</span>' : (e.auto_agregado ? ' <span class="badge badge-yellow">Pendiente</span>' : '')}</td>
       <td>${e.centro||'—'}</td>
@@ -2192,6 +2252,7 @@ function poblarDatalist(datalistId, valoresExistentes, predefinidos = []) {
 }
 
 async function validarEmp(id) {
+  if (!requiereEditor()) return;
   await sb.from('empleados').update({ auto_agregado: false }).eq('id', id);
   toast('Empleado validado.');
   cargarEmpleados();
@@ -2229,6 +2290,7 @@ function descargarPlantilla() {
 }
 
 async function procesarMasivo() {
+  if (!requiereEditor()) return;
   const input = document.getElementById('file-masivo');
   const res = document.getElementById('masivo-resultado');
   if (!input.files.length) { toast('Seleccioná un archivo primero.'); return; }
@@ -2295,6 +2357,7 @@ async function darBajaEmp(id) {
 }
 
 async function reactivarEmp(id) {
+  if (!requiereEditor()) return;
   await sb.from('empleados').update({ activo: true }).eq('id', id);
   toast('Empleado reactivado.');
   cargarEmpleados();
@@ -2384,12 +2447,12 @@ async function cargarCursos() {
     const bg = inactivo ? 'style="background:#F5F5F5;opacity:0.7;"' : '';
     let acciones = '';
     if (inactivo) {
-      acciones = `<button class="btn btn-success btn-sm" onclick="reactivarCurso('${c.id}')">Reactivar</button> `;
+      acciones = `<button data-editor class="btn btn-success btn-sm" onclick="reactivarCurso('${c.id}')">Reactivar</button> `;
     } else {
-      acciones = `<button class="btn btn-outline btn-sm" onclick="editarCurso('${c.id}')">Editar</button> `;
-      acciones += `<button class="btn btn-outline btn-sm" onclick="darBajaCurso('${c.id}')">Desactivar</button> `;
+      acciones = `<button data-editor class="btn btn-outline btn-sm" onclick="editarCurso('${c.id}')">Editar</button> `;
+      acciones += `<button data-editor class="btn btn-outline btn-sm" onclick="darBajaCurso('${c.id}')">Desactivar</button> `;
     }
-    acciones += `<button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarCurso('${c.id}', '${c.titulo.replace(/'/g,'')}')">Eliminar</button>`;
+    acciones += `<button data-editor class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="eliminarCurso('${c.id}', '${c.titulo.replace(/'/g,'')}')">Eliminar</button>`;
     const costo = (c.costo != null) ? '$' + Number(c.costo).toLocaleString('es-AR') : '—';
     return `<tr ${bg}>
       <td><span class="badge badge-gray">${c.codigo||'—'}</span></td>
@@ -2446,6 +2509,7 @@ function descargarPlantillaCursos() {
 }
 
 async function procesarMasivoCursos() {
+  if (!requiereEditor()) return;
   const input = document.getElementById('file-masivo-cursos');
   const res = document.getElementById('masivo-cursos-resultado');
   if (!input.files.length) { toast('Seleccioná un archivo primero.'); return; }
@@ -2504,6 +2568,7 @@ async function darBajaCurso(id) {
 }
 
 async function reactivarCurso(id) {
+  if (!requiereEditor()) return;
   await sb.from('capacitaciones').update({ activa: true }).eq('id', id);
   toast('Capacitación reactivada.');
   cargarCursos();
@@ -2633,8 +2698,8 @@ async function cargarPlan() {
     <td style="font-weight:500;">${p.capacitaciones?.titulo || '—'}</td>
     <td>${p.centro}</td>
     <td>${MESES[p.mes]}</td>
-    <td><span onclick="toggleParadaPlan('${p.id}', ${p.parada_linea ? 'true' : 'false'})" style="cursor:pointer;" title="Tocar para cambiar">${p.parada_linea ? '<span class="badge badge-yellow">⏸ Sí</span>' : '<span style="color:#bbb;">No</span>'}</span></td>
-    <td><button class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarPlan('${p.id}')">Quitar</button></td>
+    <td><span data-editor onclick="toggleParadaPlan('${p.id}', ${p.parada_linea ? 'true' : 'false'})" style="cursor:pointer;" title="Tocar para cambiar">${p.parada_linea ? '<span class="badge badge-yellow">⏸ Sí</span>' : '<span style="color:#bbb;">No</span>'}</span></td>
+    <td><button data-editor class="btn btn-outline btn-sm" style="color:#c0392b;border-color:#e8c0c0;" onclick="borrarPlan('${p.id}')">Quitar</button></td>
   </tr>`).join('');
 }
 
