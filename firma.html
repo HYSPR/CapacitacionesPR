@@ -351,7 +351,25 @@ body {
     </div>
     <button class="btn btn-outline" style="width:auto;padding:7px 12px;font-size:13px;" onclick="volver()">Cambiar</button>
   </div>
-  <div class="card">
+
+  <!-- Verificación de identidad: hay que confirmar el DNI antes de poder firmar,
+       para que nadie firme "de joda" por otra persona. -->
+  <div class="card" id="dni-gate">
+    <div class="sig-label">Confirmá tu DNI para firmar</div>
+    <p style="font-size:13px;color:#666;margin:2px 0 12px;">
+      Para que nadie firme en tu lugar, ingresá tu DNI completo antes de continuar.
+    </p>
+    <input type="text" id="dni-check" inputmode="numeric" autocomplete="off" placeholder="Tu DNI, sin puntos"
+      onkeydown="if(event.key==='Enter') verificarDni()"
+      style="width:100%;font-size:22px;text-align:center;letter-spacing:2px;padding:14px;border:1px solid #ddd;border-radius:10px;">
+    <p id="dni-error" style="font-size:12px;color:#B3261E;margin-top:8px;display:none;"></p>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-outline" onclick="volver()">No soy yo</button>
+      <button class="btn btn-success" onclick="verificarDni()">Continuar</button>
+    </div>
+  </div>
+
+  <div class="card" id="firma-card" style="display:none;">
     <div class="sig-label">Firma</div>
     <div class="sig-container">
       <canvas id="sigCanvas" height="170"></canvas>
@@ -715,7 +733,7 @@ function renderLista(q) {
   let arr = empleados;
   if (q) {
     const ql = q.toLowerCase();
-    arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+    arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql) || (e.dni || '').includes(ql));
   }
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
 
@@ -741,7 +759,7 @@ function renderLista(q) {
           <div class="emp-avatar">${iniciales(e.nombre)}</div>
           <div style="flex:1">
             <div class="emp-name">${e.nombre}</div>
-            <div class="emp-info">DNI ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ' · <span style="color:#1A6B3C;">ya registrado</span>'}</div>
+            <div class="emp-info">PRID ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ' · <span style="color:#1A6B3C;">ya registrado</span>'}</div>
           </div>
           <div class="emp-check">✓</div>
         </div>`;
@@ -750,7 +768,7 @@ function renderLista(q) {
         <div class="emp-avatar">${iniciales(e.nombre)}</div>
         <div style="flex:1">
           <div class="emp-name">${e.nombre}</div>
-          <div class="emp-info">DNI ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
+          <div class="emp-info">PRID ${e.legajo} · ${e.centro || 's/centro'} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}</div>
         </div>
         <div style="font-size:20px;color:${marcado ? '#1A6B3C' : '#ccc'};">${marcado ? '☑' : '☐'}</div>
       </div>`;
@@ -775,7 +793,7 @@ function renderLista(q) {
       <div class="emp-avatar">${iniciales(e.nombre)}</div>
       <div style="flex:1">
         <div class="emp-name">${e.nombre}</div>
-        <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ''}</div>
+        <div class="emp-info">PRID ${e.legajo} · ${e.sector || '—'}${e.auto_agregado ? ' · <span style="color:#92400E;">pendiente</span>' : ''}${asistioAntes ? ' · <span style="color:#1A6B3C;">ya asistió otra jornada</span>' : ''}</div>
       </div>
       ${firmado ? '<div class="emp-check">✓</div>' : (asistioAntes ? '<div class="emp-check" title="Ya asistió en otra jornada">✓</div>' : '')}
     </div>`;
@@ -839,15 +857,22 @@ async function confirmarAutoAgregar() {
   const btn = document.getElementById('btn-autoagregar');
   btn.disabled = true; btn.textContent = 'Agregando...';
 
-  const yaExiste = empleados.find(e => e.legajo === dni);
+  // El DNI puede coincidir con el legajo/PRID de alguien ya cargado (poco común,
+  // pero posible) o con el DNI de alguien que se autoagregó antes con este mismo
+  // número. Se chequean los dos campos.
+  const yaExiste = empleados.find(e => e.legajo === dni || e.dni === dni);
   if (yaExiste) {
     btn.disabled = false; btn.textContent = 'Agregarme y firmar';
     toast('Ese DNI ya está en la lista. Buscalo arriba.');
     mostrar('p-buscar'); return;
   }
 
+  // Quien se autoagrega todavía no tiene legajo/PRID asignado por RRHH, así que
+  // se usa el DNI como identificador provisorio en los dos campos: sirve para
+  // no dejar el legajo vacío (es obligatorio) y para que la persona pueda
+  // verificarse con su DNI al firmar, sin esperar a que se valide después.
   const { data, error } = await sb.from('empleados')
-    .insert({ legajo: dni, nombre, sector, centro: sesion.centro, auto_agregado: true })
+    .insert({ legajo: dni, dni, nombre, sector, centro: sesion.centro, auto_agregado: true })
     .select().single();
 
   if (error) {
@@ -874,6 +899,8 @@ async function confirmarAutoAgregar() {
   seleccionar(data.id);
 }
 
+let dniIntentos = 0;
+
 function seleccionar(id) {
   empSeleccionado = empleados.find(e => e.id === id);
   if (!empSeleccionado) return;
@@ -883,8 +910,58 @@ function seleccionar(id) {
   }
   document.getElementById('sel-avatar').textContent = iniciales(empSeleccionado.nombre);
   document.getElementById('sel-nombre').textContent = empSeleccionado.nombre;
-  document.getElementById('sel-info').textContent = 'DNI ' + empSeleccionado.legajo + ' · ' + (empSeleccionado.sector || '—');
+  document.getElementById('sel-info').textContent = 'PRID ' + empSeleccionado.legajo + ' · ' + (empSeleccionado.sector || '—');
   mostrar('p-firmar');
+
+  // Si todavía no le cargaron el DNI (nómina en transición), no hay contra qué
+  // verificar: se lo deja firmar directo, sin trabar el uso del sistema.
+  if (!empSeleccionado.dni) {
+    document.getElementById('dni-gate').style.display = 'none';
+    abrirTablaFirma();
+    return;
+  }
+
+  // Arranca pidiendo el DNI; la firma queda tapada hasta confirmarlo.
+  dniIntentos = 0;
+  document.getElementById('dni-gate').style.display = 'block';
+  document.getElementById('firma-card').style.display = 'none';
+  const inpDni = document.getElementById('dni-check');
+  inpDni.value = '';
+  document.getElementById('dni-error').style.display = 'none';
+  setTimeout(() => inpDni.focus(), 100);
+}
+
+function verificarDni() {
+  const inpDni = document.getElementById('dni-check');
+  const err = document.getElementById('dni-error');
+  const ingresado = inpDni.value.replace(/\D/g, '');
+  const real = String(empSeleccionado.dni || '').replace(/\D/g, '');
+
+  if (!ingresado) { err.textContent = 'Ingresá tu DNI.'; err.style.display = 'block'; return; }
+
+  if (ingresado !== real) {
+    dniIntentos++;
+    if (dniIntentos >= 3) {
+      toast('El DNI no coincide. Volvé a buscarte en la lista.');
+      volver();
+      return;
+    }
+    err.textContent = 'El DNI no coincide con el registrado. Si no sos ' + empSeleccionado.nombre.split(' ')[0] + ', tocá "No soy yo".';
+    err.style.display = 'block';
+    inpDni.value = '';
+    inpDni.focus();
+    return;
+  }
+
+  document.getElementById('dni-gate').style.display = 'none';
+  err.style.display = 'none';
+  abrirTablaFirma();
+}
+
+function abrirTablaFirma() {
+  document.getElementById('firma-card').style.display = 'block';
+  // El pequeño delay es necesario para que el canvas ya tenga su tamaño
+  // definitivo en el DOM antes de inicializar el pad de firma.
   setTimeout(() => {
     iniciarPad();
     document.getElementById('sig-hint').style.display = 'block';
@@ -893,7 +970,7 @@ function seleccionar(id) {
   }, 50);
 }
 
-function volver() { empSeleccionado = null; mostrar('p-buscar'); }
+function volver() { empSeleccionado = null; dniIntentos = 0; mostrar('p-buscar'); }
 
 function limpiar() {
   if (pad) pad.clear();
@@ -989,7 +1066,7 @@ function renderListaConvocados(q) {
   let arr = empleados;
   if (q) {
     const ql = q.toLowerCase();
-    arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+    arr = empleados.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql) || (e.dni || '').includes(ql));
   }
   if (!arr.length) { lista.innerHTML = '<div class="empty-list">Sin resultados</div>'; return; }
 
@@ -1003,7 +1080,7 @@ function renderListaConvocados(q) {
         <div class="emp-avatar">${iniciales(e.nombre)}</div>
         <div style="flex:1">
           <div class="emp-name">${e.nombre}</div>
-          <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'} · <span style="color:#1A6B3C;">ya asistió otra jornada</span></div>
+          <div class="emp-info">PRID ${e.legajo} · ${e.sector || '—'} · <span style="color:#1A6B3C;">ya asistió otra jornada</span></div>
         </div>
         <div style="font-size:18px;color:#1A6B3C;">✓</div>
       </div>`;
@@ -1012,7 +1089,7 @@ function renderListaConvocados(q) {
       <div class="emp-avatar">${iniciales(e.nombre)}</div>
       <div style="flex:1">
         <div class="emp-name">${e.nombre}</div>
-        <div class="emp-info">DNI ${e.legajo} · ${e.sector || '—'}${firmo ? ' · <span style="color:#1A6B3C;">ya firmó</span>' : ''}</div>
+        <div class="emp-info">PRID ${e.legajo} · ${e.sector || '—'}${firmo ? ' · <span style="color:#1A6B3C;">ya firmó</span>' : ''}</div>
       </div>
       <div style="font-size:18px;color:${conv ? '#1A6B3C' : '#ccc'};">${conv ? '✓' : '○'}</div>
     </div>`;
