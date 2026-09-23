@@ -732,6 +732,12 @@ body.solo-consulta [data-editor] { display: none !important; }
           <div class="form-group"><label>Legajo *</label><input type="text" id="e-legajo" placeholder="4521"></div>
           <div class="form-group"><label>Nombre y apellido *</label><input type="text" id="e-nombre" placeholder="Juan Pérez"></div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>DNI</label>
+            <input type="text" id="e-dni" placeholder="Sin puntos" inputmode="numeric">
+          </div>
+        </div>
         <div class="form-row-3">
           <div class="form-group">
             <label>Centro productivo</label>
@@ -787,13 +793,13 @@ body.solo-consulta [data-editor] { display: none !important; }
             <option value="">Todos los centros</option>
             <option>Bella Vista</option><option>San Rafael</option><option>Administración</option>
           </select>
-          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [1,2,3])">
+          <input class="search-input" type="text" placeholder="Buscar..." oninput="filtrarTabla('tbl-emp', this.value, [1,2,3,4])">
         </div>
       </div>
       <div class="table-wrap">
         <table id="tbl-emp">
-          <thead><tr><th data-editor><input type="checkbox" id="chk-todos-emp" onchange="toggleTodosEmp(this.checked)" style="width:auto;"></th><th>DNI/Legajo</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
-          <tbody id="body-emp"><tr class="empty-row"><td colspan="9">Cargando...</td></tr></tbody>
+          <thead><tr><th data-editor><input type="checkbox" id="chk-todos-emp" onchange="toggleTodosEmp(this.checked)" style="width:auto;"></th><th>Legajo</th><th>DNI</th><th>Nombre</th><th>Centro</th><th>Sector</th><th>Contrato</th><th>Género</th><th>Convenio</th><th>Acción</th></tr></thead>
+          <tbody id="body-emp"><tr class="empty-row"><td colspan="10">Cargando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -930,8 +936,14 @@ body.solo-consulta [data-editor] { display: none !important; }
     <h3>Editar empleado</h3>
     <input type="hidden" id="edit-emp-id">
     <div class="form-row">
-      <div class="form-group"><label>DNI/Legajo</label><input type="text" id="edit-emp-legajo"></div>
+      <div class="form-group"><label>Legajo</label><input type="text" id="edit-emp-legajo"></div>
       <div class="form-group"><label>Nombre y apellido</label><input type="text" id="edit-emp-nombre"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>DNI</label>
+        <input type="text" id="edit-emp-dni" placeholder="Sin puntos" inputmode="numeric">
+      </div>
     </div>
     <div class="form-row-3">
       <div class="form-group">
@@ -1574,7 +1586,7 @@ async function abrirAsistenciaManual(sesionId) {
   document.getElementById('am-buscar').value = '';
   amSeleccionados = new Set();
 
-  const { data: emps } = await sb.from('empleados').select('id, legajo, nombre, sector, centro').eq('activo', true).order('nombre');
+  const { data: emps } = await sb.from('empleados').select('id, legajo, dni, nombre, sector, centro').eq('activo', true).order('nombre');
   amEmpleadosTodos = emps || [];
 
   const { data: asis } = await sb.from('asistencias').select('empleado_id').eq('sesion_id', sesionId).eq('anulada', false);
@@ -1594,7 +1606,7 @@ function renderAsistenciaManual(q) {
   let arr = amEmpleadosTodos;
   if (q) {
     const ql = q.toLowerCase();
-    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql) || (e.dni || '').includes(ql));
   }
   const cont = document.getElementById('am-lista');
   if (!arr.length) { cont.innerHTML = '<div style="padding:10px;color:#999;font-size:13px;">Sin resultados.</div>'; return; }
@@ -1656,7 +1668,7 @@ async function abrirConvocadosRetro(sesionId) {
   crParaQuitar = new Set();
   crVista = 'todos';
 
-  const { data: emps } = await sb.from('empleados').select('id, legajo, nombre, sector, centro').eq('activo', true).order('nombre');
+  const { data: emps } = await sb.from('empleados').select('id, legajo, dni, nombre, sector, centro').eq('activo', true).order('nombre');
   crEmpleadosTodos = emps || [];
 
   const { data: conv } = await sb.from('convocados').select('empleado_id').eq('sesion_id', sesionId);
@@ -1702,7 +1714,7 @@ function renderConvocadosRetro(q) {
   let arr = crEmpleadosTodos;
   if (q) {
     const ql = q.toLowerCase();
-    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql));
+    arr = arr.filter(e => e.nombre.toLowerCase().includes(ql) || e.legajo.includes(ql) || (e.dni || '').includes(ql));
   }
   if (crVista === 'convocados') arr = arr.filter(e => crYaConvocados.has(e.id));
   const cont = document.getElementById('cr-lista');
@@ -2198,7 +2210,7 @@ async function cargarEmpleados() {
   if (tituloEl) tituloEl.textContent = verInactivos ? 'Empleados dados de baja' : 'Empleados activos';
   if (!data || !data.length) {
     const msg = verInactivos ? 'No hay empleados dados de baja.' : 'Sin empleados.';
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="9">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10">' + msg + '</td></tr>';
     return;
   }
 
@@ -2227,6 +2239,7 @@ async function cargarEmpleados() {
     return `<tr ${bg}>
       <td data-editor><input type="checkbox" class="chk-emp" value="${e.id}" onchange="toggleSeleccionEmp('${e.id}', this.checked)" style="width:auto;" ${empleadosSeleccionados.has(e.id) ? 'checked' : ''}></td>
       <td>${e.legajo}</td>
+      <td>${e.dni || '<span style="color:#c99;">sin cargar</span>'}</td>
       <td style="font-weight:500;">${e.nombre}${inactivo ? ' <span class="badge badge-gray">Baja</span>' : (e.auto_agregado ? ' <span class="badge badge-yellow">Pendiente</span>' : '')}</td>
       <td>${e.centro||'—'}</td>
       <td>${e.sector||'—'}</td>
@@ -2272,6 +2285,7 @@ async function validarEmp(id) {
 async function agregarEmpleado() {
   if (!requiereEditor()) return;
   const legajo = document.getElementById('e-legajo').value.trim();
+  const dni = document.getElementById('e-dni').value.trim();
   const nombre = document.getElementById('e-nombre').value.trim();
   const centro = document.getElementById('e-centro').value.trim();
   const sector = document.getElementById('e-sector').value.trim();
@@ -2279,9 +2293,10 @@ async function agregarEmpleado() {
   const genero = document.getElementById('e-genero').value.trim();
   const convenio = document.getElementById('e-convenio').value.trim();
   if (!legajo || !nombre) { toast('Completá legajo y nombre.'); return; }
-  const { error } = await sb.from('empleados').insert({ legajo, nombre, centro, sector, contrato, genero, convenio });
+  const { error } = await sb.from('empleados').insert({ legajo, dni: dni || null, nombre, centro, sector, contrato, genero, convenio });
   if (error) { toast(error.message.includes('unique') ? 'Ese legajo ya existe.' : 'Error al guardar.'); return; }
   document.getElementById('e-legajo').value = '';
+  document.getElementById('e-dni').value = '';
   document.getElementById('e-nombre').value = '';
   auditar('crear','empleado','Agregó al empleado '+nombre+' (leg. '+legajo+')');
   toast('Empleado agregado.');
@@ -2291,9 +2306,9 @@ async function agregarEmpleado() {
 // ── CARGA MASIVA ──
 function descargarPlantilla() {
   const rows = [
-    ['legajo', 'nombre', 'centro', 'sector', 'contrato', 'genero', 'convenio'],
-    ['4521', 'Juan Pérez', 'Bella Vista', 'Envasado', 'Efectivo', 'Masculino', 'Dentro de convenio'],
-    ['4587', 'Ana López', 'San Rafael', 'Calidad', 'Temporada', 'Femenino', 'Fuera de convenio']
+    ['legajo', 'dni', 'nombre', 'centro', 'sector', 'contrato', 'genero', 'convenio'],
+    ['4521', '30123456', 'Juan Pérez', 'Bella Vista', 'Envasado', 'Efectivo', 'Masculino', 'Dentro de convenio'],
+    ['4587', '28987654', 'Ana López', 'San Rafael', 'Calidad', 'Temporada', 'Femenino', 'Fuera de convenio']
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Empleados');
@@ -2328,6 +2343,7 @@ async function procesarMasivo() {
       };
       return {
         legajo: get(['legajo']),
+        dni: get(['dni']),
         nombre: get(['nombre', 'nombre y apellido', 'apellido y nombre']),
         centro: get(['centro', 'centro productivo', 'planta']),
         sector: get(['sector']),
@@ -2342,15 +2358,32 @@ async function procesarMasivo() {
       return;
     }
 
-    // Insertar con upsert (actualiza si el legajo ya existe)
-    const { error } = await sb.from('empleados').upsert(empleados, { onConflict: 'legajo' });
+    // Se sube en dos pasos. El primero trae siempre las mismas columnas (sin DNI)
+    // para todos los empleados. El segundo actualiza el DNI, pero SOLO para las
+    // filas que trajeron ese dato en la planilla — así, si se vuelve a subir un
+    // archivo viejo o parcial sin columna de DNI, no se borra el que ya estaba
+    // cargado y validado.
+    const base = empleados.map(({ dni, ...resto }) => resto);
+    const { error } = await sb.from('empleados').upsert(base, { onConflict: 'legajo' });
 
     if (error) {
       res.innerHTML = '<span style="color:#c0392b;">Error: ' + error.message + '</span>';
       return;
     }
 
-    res.innerHTML = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + empleados.length + ' empleados cargados correctamente.</span>';
+    const conDni = empleados.filter(e => e.dni).map(e => ({ legajo: e.legajo, dni: e.dni }));
+    if (conDni.length) {
+      const { error: errDni } = await sb.from('empleados').upsert(conDni, { onConflict: 'legajo' });
+      if (errDni) {
+        res.innerHTML = '<span style="color:#c0392b;">Los empleados se cargaron, pero hubo un error al guardar los DNI: ' + errDni.message + '</span>';
+        input.value = '';
+        cargarEmpleados();
+        return;
+      }
+    }
+
+    res.innerHTML = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + empleados.length + ' empleados cargados correctamente' +
+      (conDni.length ? ' (' + conDni.length + ' con DNI).' : ', sin DNI en la planilla.') + '</span>';
     input.value = '';
     cargarEmpleados();
   } catch (err) {
@@ -2408,6 +2441,7 @@ async function editarEmp(id) {
   if (!data) { toast('No se encontró el empleado.'); return; }
   document.getElementById('edit-emp-id').value = data.id;
   document.getElementById('edit-emp-legajo').value = data.legajo || '';
+  document.getElementById('edit-emp-dni').value = data.dni || '';
   document.getElementById('edit-emp-nombre').value = data.nombre || '';
   document.getElementById('edit-emp-centro').value = data.centro || '';
   document.getElementById('edit-emp-sector').value = data.sector || '';
@@ -2425,10 +2459,11 @@ async function guardarEmp() {
   if (!requiereEditor()) return;
   const id = document.getElementById('edit-emp-id').value;
   const legajo = document.getElementById('edit-emp-legajo').value.trim();
+  const dni = document.getElementById('edit-emp-dni').value.trim();
   const nombre = document.getElementById('edit-emp-nombre').value.trim();
   if (!legajo || !nombre) { toast('Completá legajo y nombre.'); return; }
   const { error } = await sb.from('empleados').update({
-    legajo, nombre,
+    legajo, dni: dni || null, nombre,
     centro: document.getElementById('edit-emp-centro').value.trim(),
     sector: document.getElementById('edit-emp-sector').value.trim(),
     contrato: document.getElementById('edit-emp-contrato').value.trim(),
