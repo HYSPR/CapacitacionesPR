@@ -714,13 +714,36 @@ body.solo-consulta [data-editor] { display: none !important; }
       </div>
       <div class="card-body">
         <p style="font-size:13px;color:#666;margin-bottom:12px;">
-          Subí un Excel con las columnas: <strong>legajo, nombre, sector, contrato, genero, convenio</strong>.
-          Descargá la plantilla si querés el formato exacto.
+          Subí un Excel con las columnas: <strong>legajo, nombre, centro, sector, contrato, genero, convenio</strong>
+          (y opcionalmente <strong>dni</strong>). Pensada para dar de alta gente nueva o actualizar a alguien
+          completo. Si un legajo ya existe, esta carga <strong>pisa todos esos campos</strong> con lo que traiga
+          el archivo — dejalos completos, no la uses solo para agregar el DNI de gente que ya está cargada.
+          Para eso usá "Completar DNI de la nómina", más abajo.
         </p>
         <input type="file" id="file-masivo" accept=".xlsx,.xls,.csv"
                style="font-size:13px;margin-bottom:12px;display:block;">
         <button data-editor class="btn btn-success" onclick="procesarMasivo()">Procesar archivo</button>
         <div id="masivo-resultado" style="margin-top:12px;font-size:13px;"></div>
+      </div>
+    </div>
+
+    <!-- Carga masiva: solo DNI, para completar gente ya cargada sin tocar el resto -->
+    <div class="card" data-editor>
+      <div class="card-header">
+        <h2>Completar DNI de la nómina</h2>
+        <button class="btn btn-outline btn-sm" onclick="descargarPlantillaDni()">⬇ Descargar plantilla</button>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:#666;margin-bottom:12px;">
+          Para cargar el DNI de empleados que <strong>ya están dados de alta</strong>, sin tocar ningún otro
+          dato suyo. El archivo solo necesita dos columnas: <strong>legajo</strong> (para encontrar a la
+          persona) y <strong>dni</strong>. Un legajo que no exista en el sistema se informa y se salta —
+          nunca crea un empleado nuevo desde acá.
+        </p>
+        <input type="file" id="file-masivo-dni" accept=".xlsx,.xls,.csv"
+               style="font-size:13px;margin-bottom:12px;display:block;">
+        <button data-editor class="btn btn-success" onclick="procesarMasivoDni()">Procesar archivo</button>
+        <div id="masivo-dni-progreso" style="margin-top:12px;font-size:13px;"></div>
       </div>
     </div>
 
@@ -2384,6 +2407,79 @@ async function procesarMasivo() {
 
     res.innerHTML = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + empleados.length + ' empleados cargados correctamente' +
       (conDni.length ? ' (' + conDni.length + ' con DNI).' : ', sin DNI en la planilla.') + '</span>';
+    input.value = '';
+    cargarEmpleados();
+  } catch (err) {
+    res.innerHTML = '<span style="color:#c0392b;">Error al leer el archivo: ' + err.message + '</span>';
+  }
+}
+
+// ── CARGA MASIVA: SOLO DNI (completar nómina existente, sin tocar el resto) ──
+function descargarPlantillaDni() {
+  const rows = [
+    ['legajo', 'dni'],
+    ['4521', '30123456'],
+    ['4587', '28987654']
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'DNI');
+  XLSX.writeFile(wb, 'Plantilla_completar_DNI.xlsx');
+}
+
+async function procesarMasivoDni() {
+  if (!requiereEditor()) return;
+  const input = document.getElementById('file-masivo-dni');
+  const res = document.getElementById('masivo-dni-progreso');
+  if (!input.files.length) { toast('Seleccioná un archivo primero.'); return; }
+
+  res.innerHTML = '<span style="color:#888;">Procesando...</span>';
+
+  try {
+    const file = input.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rows.length) { res.innerHTML = '<span style="color:#c0392b;">El archivo está vacío.</span>'; return; }
+
+    const get = (r, keys) => {
+      for (const k of Object.keys(r)) {
+        const kn = k.toLowerCase().trim().replace(/é/g,'e').replace(/í/g,'i');
+        if (keys.includes(kn)) return String(r[k]).trim();
+      }
+      return '';
+    };
+    const pares = rows
+      .map(r => ({ legajo: get(r, ['legajo']), dni: get(r, ['dni']) }))
+      .filter(p => p.legajo && p.dni);
+
+    if (!pares.length) {
+      res.innerHTML = '<span style="color:#c0392b;">No se encontraron filas válidas. Revisá que las columnas se llamen legajo y dni.</span>';
+      return;
+    }
+
+    // Se trae la nómina actual para saber qué legajos existen de verdad. Un
+    // "update" nunca crea filas nuevas, pero así se puede avisar cuáles
+    // legajos de la planilla no coinciden con nadie, en vez de fallar en
+    // silencio.
+    const { data: actuales } = await sb.from('empleados').select('legajo');
+    const legajosExistentes = new Set((actuales || []).map(e => e.legajo));
+
+    const noEncontrados = [];
+    let actualizados = 0;
+    for (const p of pares) {
+      if (!legajosExistentes.has(p.legajo)) { noEncontrados.push(p.legajo); continue; }
+      const { error } = await sb.from('empleados').update({ dni: p.dni }).eq('legajo', p.legajo);
+      if (!error) actualizados++;
+    }
+
+    let msg = '<span style="color:#1A6B3C;font-weight:600;">✓ ' + actualizados + ' DNI actualizados.</span>';
+    if (noEncontrados.length) {
+      msg += '<br><span style="color:#92400E;">⚠ ' + noEncontrados.length + ' legajo(s) no encontrados en el sistema, se saltearon: ' +
+        noEncontrados.slice(0, 15).join(', ') + (noEncontrados.length > 15 ? '…' : '') + '</span>';
+    }
+    res.innerHTML = msg;
     input.value = '';
     cargarEmpleados();
   } catch (err) {
